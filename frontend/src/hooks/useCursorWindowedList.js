@@ -149,8 +149,6 @@ export default function useCursorWindowedList({
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-    // `deps` intentionally controls cursor reset from the caller.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, fetchRows, pageSize, ...deps]);
 
   const loadMore = useCallback(() => {

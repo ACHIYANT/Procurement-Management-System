@@ -24,10 +24,8 @@ const label = (value) =>
 export default function DepartmentFundList() {
   const navigate = useNavigate();
   const [roles] = useState(() => getCurrentUserRoles());
-  const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
   const [sortConfig, setSortConfig] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [selectedRows, setSelectedRows] = useState(null);
   const [popup, setPopup] = useState({ open: false, type: "info", message: "" });
   const debouncedSearch = useDebounce(search, 350);
@@ -66,11 +64,6 @@ export default function DepartmentFundList() {
   });
 
   useEffect(() => {
-    setRows(cursorRows);
-    setLoading(cursorLoading);
-  }, [cursorLoading, cursorRows]);
-
-  useEffect(() => {
     if (!error) return undefined;
     const timer = setTimeout(() => {
       setPopup({
@@ -99,8 +92,8 @@ export default function DepartmentFundList() {
         title="Department Funds"
         subtitle="Capture department-side fund movements once here. Live PMS procurement records will later feed reconciliation automatically."
         columns={columns}
-        data={rows}
-        loading={loading}
+        data={cursorRows}
+        loading={cursorLoading}
         onAdd={() => navigate("/department-funds/new")}
         addLabel="Add Fund Entry"
         onSearch={setSearch}
@@ -112,7 +105,7 @@ export default function DepartmentFundList() {
         table={
           <ListTable
             columns={columns}
-            data={rows}
+            data={cursorRows}
             idCol="id"
             selectedRows={selectedRows}
             onRowSelect={(id) => setSelectedRows((current) => (current === id ? null : id))}
