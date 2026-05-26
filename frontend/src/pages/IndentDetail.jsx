@@ -98,9 +98,6 @@ const detailShellClass =
 const sectionTitleClass =
   "text-[1.4rem] font-semibold tracking-[-0.03em] text-[#1d1d1f]";
 const sectionSubtitleClass = "text-sm text-black/56";
-const statLabelClass =
-  "text-[10px] font-semibold uppercase tracking-[0.24em] text-black/42";
-const mutedPanelClass = "rounded-[22px] bg-[#f5f5f7] ring-1 ring-black/6";
 const dashedPanelClass =
   "rounded-[22px] border border-dashed border-black/12 bg-[#f5f5f7] px-4 py-6 text-sm text-black/56";
 const actionPrimaryClass =
@@ -134,7 +131,9 @@ export default function IndentDetail() {
   const [savingDocuments, setSavingDocuments] = useState(false);
   const [savingAdditionalDocument, setSavingAdditionalDocument] =
     useState(false);
-  const [adminApprovalRemarks, setAdminApprovalRemarks] = useState("");
+  const [adminApprovalRemarks, setAdminApprovalRemarks] = useState(
+    indent?.administrative_approval_remarks || "",
+  );
   const [additionalDocumentForm, setAdditionalDocumentForm] = useState(
     emptyAdditionalDocumentForm,
   );
@@ -211,6 +210,7 @@ export default function IndentDetail() {
       setLoading(true);
       const data = await procurementRequest(`/indents/${id}`);
       setIndent(data);
+      setAdminApprovalRemarks(data?.administrative_approval_remarks || "");
       hydrateLocalForms(data);
     } catch (error) {
       setPopup({
@@ -229,14 +229,7 @@ export default function IndentDetail() {
   }, [loadIndent]);
 
   useEffect(() => {
-    setAdminApprovalRemarks(indent?.administrative_approval_remarks || "");
-  }, [indent?.administrative_approval_remarks]);
-
-  useEffect(() => {
-    if (!isAdmin) {
-      setEmployees([]);
-      return undefined;
-    }
+    if (!isAdmin) return undefined;
 
     const timer = setTimeout(async () => {
       try {
@@ -258,7 +251,10 @@ export default function IndentDetail() {
     return () => clearTimeout(timer);
   }, [isAdmin]);
 
-  const items = Array.isArray(indent?.items) ? indent.items : [];
+  const items = useMemo(
+    () => (Array.isArray(indent?.items) ? indent.items : []),
+    [indent?.items],
+  );
   const procurementCases = Array.isArray(indent?.procurement_cases)
     ? indent.procurement_cases
     : [];
@@ -941,10 +937,6 @@ export default function IndentDetail() {
                     const estimateForm =
                       estimateForms[itemId] || emptyEstimateForm();
                     const returnForm = returnForms[itemId] || emptyReturnForm();
-                    const assignmentStatus = String(
-                      item?.assignment_status || "",
-                    ).toLowerCase();
-                    const isReturnedItem = assignmentStatus === "returned";
                     const isMyAssignedItem =
                       officerEmpcode &&
                       String(

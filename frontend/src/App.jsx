@@ -12,7 +12,6 @@ import DepartmentFundList from "./pages/DepartmentFundList";
 import PbgEdit from "./pages/PbgEdit";
 import Reconciliation from "./pages/Reconciliation";
 import ReconciliationDepartmentDetail from "./pages/ReconciliationDepartmentDetail";
-import ComingSoon from "./pages/ComingSoon";
 import Reports from "./pages/Reports";
 import FirmList from "./pages/FirmList";
 import FirmForm from "./pages/FirmForm";

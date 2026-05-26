@@ -334,23 +334,6 @@ export default function IndentForm() {
     });
   };
 
-  const updateItemValue = (index, field, value) => {
-    setForm((current) => ({
-      ...current,
-      items: current.items.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, [field]: value } : item,
-      ),
-    }));
-    setErrors((current) => {
-      const next = { ...current };
-      if (Array.isArray(next.items) && next.items[index]) {
-        next.items = [...next.items];
-        next.items[index] = { ...next.items[index], [field]: undefined };
-      }
-      return next;
-    });
-  };
-
   const addItem = () => {
     setForm((current) => ({
       ...current,

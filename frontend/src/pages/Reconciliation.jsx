@@ -20,11 +20,6 @@ const money = (value) =>
     maximumFractionDigits: 2,
   });
 
-const label = (value) =>
-  String(value || "NA")
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (match) => match.toUpperCase());
-
 export default function Reconciliation() {
   const navigate = useNavigate();
   const [entries, setEntries] = useState([]);

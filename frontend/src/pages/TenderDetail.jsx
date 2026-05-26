@@ -16,7 +16,6 @@ import FieldError from "@/components/FieldError";
 import FileAttachmentField from "@/components/FileAttachmentField";
 import PopupMessage from "@/components/PopupMessage";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   formatCompactIndianAmount,
   formatCurrencyINR,
@@ -277,28 +276,6 @@ const buildWarrantyPeriod = ({ warranty_years, warranty_months }) => {
     .join(" ");
 };
 
-const parseWarrantyMonths = (value) => {
-  const text = String(value || "").toLowerCase();
-  const yearMatch = text.match(/(\d+(?:\.\d+)?)\s*years?/);
-  const monthMatch = text.match(/(\d+(?:\.\d+)?)\s*months?/);
-  return Math.round(Number(yearMatch?.[1] || 0) * 12 + Number(monthMatch?.[1] || 0));
-};
-
-const addMonths = (value, months) => {
-  if (!value || !months) return value ? new Date(value) : null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setMonth(date.getMonth() + Number(months || 0));
-  return date;
-};
-
-const formatDate = (value) => {
-  if (!value) return "NA";
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "NA";
-  return date.toISOString().slice(0, 10);
-};
-
 const toDateTimeLocalValue = (value) => {
   if (!value) return "";
   const text = String(value);
@@ -349,13 +326,6 @@ const getEffectiveDeadline = (tender) =>
   parseTenderDeadline(
     tender?.current_submission_deadline || tender?.bid_submission_date,
   );
-
-const stepCardClass = (status) => {
-  if (status === "current") return "border-blue-500 bg-blue-50 shadow-md";
-  if (status === "available") return "border-amber-300 bg-amber-50";
-  if (status === "completed") return "border-emerald-300 bg-emerald-50";
-  return "border-slate-200 bg-slate-50 opacity-80";
-};
 
 const iconForStep = (status) => {
   if (status === "completed")
@@ -441,7 +411,6 @@ export default function TenderDetail() {
   const [savingLoaRcVendorId, setSavingLoaRcVendorId] = useState(null);
   const [savingAllocationExtensionVendorId, setSavingAllocationExtensionVendorId] =
     useState(null);
-  const [savingPbgSetupVendorId, setSavingPbgSetupVendorId] = useState(null);
   const [savingTenderPbgSetup, setSavingTenderPbgSetup] = useState(false);
   const [savingPbgReceipt, setSavingPbgReceipt] = useState(false);
   const [deletingVendorId, setDeletingVendorId] = useState(null);
@@ -695,7 +664,7 @@ export default function TenderDetail() {
 
     setPoItemForms(
       basePoItemForms
-        .map((item, index) => {
+        .map((item) => {
           const quote = quoteByTenderItemId.get(Number(item.tender_item_id));
           const allocatedQuantity = asPositiveAmount(
             quote?.loa_allocated_quantity || 0,
@@ -971,7 +940,6 @@ export default function TenderDetail() {
     return Date.now() > effectiveDeadline.getTime();
   }, [effectiveDeadline]);
   const hasBidOpened = vendors.length > 0;
-  const isBidWindowOpen = !hasBidOpened;
   const isTechnicalStepOpen = hasBidOpened || isDeadlinePassed;
   const canRecordSubmissionExtension =
     canPerformOfficerTenderActions && !hasBidOpened;
@@ -1119,9 +1087,6 @@ export default function TenderDetail() {
   const pbgEngine = tender?.pbg_engine || {};
   const pbgVendorProfiles = Array.isArray(pbgEngine?.vendor_profiles)
     ? pbgEngine.vendor_profiles
-    : [];
-  const pbgObligations = Array.isArray(pbgEngine?.obligations)
-    ? pbgEngine.obligations
     : [];
   const pbgReceipts = Array.isArray(pbgEngine?.receipts) ? pbgEngine.receipts : [];
   const pbgComplianceRows = Array.isArray(pbgEngine?.compliance)
@@ -3579,7 +3544,6 @@ export default function TenderDetail() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
 	                      {commercialQualifiedVendors.map((vendor, index) => {
-	                        const form = negotiationForms[vendor.id] || {};
 	                        const rank = negotiationRankByVendorId[vendor.id];
 	                        const itemwiseRanks =
 	                          negotiationItemRankByVendorId[vendor.id] || {};
@@ -3810,7 +3774,6 @@ export default function TenderDetail() {
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {allocationEligibleVendors.map((vendor, index) => {
-                          const form = negotiationForms[vendor.id] || {};
                           const extensionForm =
                             allocationExtensionForms[vendor.id] || {};
                           const allocationField =

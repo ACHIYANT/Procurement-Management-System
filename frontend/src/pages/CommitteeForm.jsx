@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, MinusCircle, PlusCircle } from "lucide-react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import FileAttachmentField from "@/components/FileAttachmentField";
 import PopupMessage from "@/components/PopupMessage";
@@ -121,7 +121,6 @@ const getStaticMemberPaymentAmount = (memberGroup, memberName) => {
 };
 
 export default function CommitteeForm() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [popup, setPopup] = useState({
     open: false,
@@ -133,8 +132,6 @@ export default function CommitteeForm() {
   const [errors, setErrors] = useState({});
   const [procurementCases, setProcurementCases] = useState([]);
   const [tenders, setTenders] = useState([]);
-  const [firms, setFirms] = useState([]);
-  const [items, setItems] = useState([]);
   const [form, setForm] = useState({
     procurement_case_id: searchParams.get("procurementCaseId") || "",
     tender_id: searchParams.get("tenderId") || "",
@@ -157,38 +154,18 @@ export default function CommitteeForm() {
   useEffect(() => {
     const timer = setTimeout(async () => {
       try {
-        const [caseData, tenderData, firmData] = await Promise.all([
+        const [caseData, tenderData] = await Promise.all([
           procurementRequest("/procurement-cases?cursorMode=true&limit=200"),
           procurementRequest("/tenders?cursorMode=true&limit=200"),
-          procurementRequest("/firms?cursorMode=true&limit=200"),
         ]);
         setProcurementCases(caseData?.rows || []);
         setTenders(tenderData?.rows || []);
-        setFirms(firmData?.rows || []);
       } catch (error) {
         setPopup({ open: true, type: "error", message: error.message || "Unable to load committee masters." });
       }
     }, 0);
     return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    if (!form.procurement_case_id) {
-      setItems([]);
-      return undefined;
-    }
-
-    const timer = setTimeout(async () => {
-      try {
-        const data = await procurementRequest(`/procurement-cases/${form.procurement_case_id}`);
-        setItems(Array.isArray(data?.case_items) ? data.case_items : []);
-      } catch {
-        setItems([]);
-      }
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [form.procurement_case_id]);
 
   const filteredTenders = useMemo(
     () =>
@@ -371,15 +348,6 @@ export default function CommitteeForm() {
         members: nextMembers,
       };
     });
-  };
-
-  const setNegotiationField = (index, field, value) => {
-    setForm((current) => ({
-      ...current,
-      negotiation_entries: current.negotiation_entries.map((entry, entryIndex) =>
-        entryIndex === index ? { ...entry, [field]: value } : entry,
-      ),
-    }));
   };
 
   const uploadDocument = (scope, filenameBase) => async (file) => {
