@@ -1,0 +1,145 @@
+{
+  "meetingTypeMemberGroups": {
+    "specification_finalization": [
+      "hartron_official",
+      "technical_committee_member",
+      "indenting_department_official",
+      "other"
+    ],
+    "bid_opening_committee": ["hartron_official", "indenting_department_official", "other"],
+    "indent_examination_committee": ["hartron_official", "indenting_department_official", "other"],
+    "technical_committee": [
+      "hartron_official",
+      "technical_committee_member",
+      "indenting_department_official",
+      "other"
+    ],
+    "technical_committee_inspection": [
+      "hartron_official",
+      "technical_committee_member",
+      "indenting_department_official",
+      "other"
+    ],
+    "contractual_compliance_committee": ["hartron_official", "indenting_department_official", "other"],
+    "legal_audit_committee": ["hartron_official", "indenting_department_official", "other"],
+    "purchase_committee": [
+      "hartron_official",
+      "purchase_committee_member",
+      "indenting_department_official",
+      "other"
+    ],
+    "purchase_committee_lower": [
+      "hartron_official",
+      "purchase_committee_member",
+      "indenting_department_official",
+      "other"
+    ],
+    "purchase_committee_upper": [
+      "hartron_official",
+      "purchase_committee_member",
+      "indenting_department_official",
+      "other"
+    ],
+    "dhppc": [
+      "hartron_official",
+      "dhppc_member",
+      "minister",
+      "ias_official",
+      "indenting_department_official",
+      "other"
+    ],
+    "hppc": [
+      "hartron_official",
+      "hppc_member",
+      "chief_minister",
+      "ias_official",
+      "indenting_department_official",
+      "other"
+    ],
+    "other": ["hartron_official", "indenting_department_official", "other"]
+  },
+  "membersByGroup": {
+    "hartron_official": [
+      {
+        "member_name": "Achiyant",
+        "designation": "JSD, Procurement",
+        "organisation_name": "Hartron"
+      },
+
+      {
+        "member_name": "Charanjeet Singh Channi",
+        "designation": "AGM, Procurement",
+        "organisation_name": "Hartron"
+      },
+
+      {
+        "member_name": "Naveen Chaudhary",
+        "designation": "GM, HMSDC",
+        "organisation_name": "Hartron"
+      },
+      {
+        "member_name": "Naveen Chauhan",
+        "designation": "Dy. Cordinator, F&A",
+        "organisation_name": "Hartron"
+      },
+      {
+        "member_name": "Nirmal Prakash",
+        "designation": "Coordinator, Procurement",
+        "organisation_name": "Hartron"
+      },
+      {
+        "member_name": "Rakesh",
+        "designation": "NA, Procurement",
+        "organisation_name": "Hartron"
+      },
+      {
+        "member_name": "Sandeep Verma",
+        "designation": "GM, TDS",
+        "organisation_name": "Hartron"
+      },
+      {
+        "member_name": "Surender",
+        "designation": "HA, Procurement",
+        "organisation_name": "Hartron"
+      },
+      {
+        "member_name": "Upender Trehan",
+        "designation": "SA, Procurement",
+        "organisation_name": "Hartron"
+      },
+      {
+        "member_name": "Vivek Chauhan",
+        "designation": "DGM, Procurement",
+        "organisation_name": "Hartron"
+      }
+    ],
+    "technical_committee_member": [
+      {
+        "member_name": "Rozil Garg",
+        "designation": "Joint Director IT",
+        "organisation_name": "NIC",
+        "payment_amount_per_day": 1500
+      },
+      {
+        "member_name": "Sanjay Batish",
+        "designation": "Head Computer Center",
+        "organisation_name": "PEC, Chandigarh",
+        "payment_amount_per_day": 1500
+      },
+      {
+        "member_name": "RS Sangwan",
+        "designation": "Principal",
+        "organisation_name": "College, Sec. 26, Panchkula",
+        "payment_amount_per_day": 1500
+      }
+    ],
+    "purchase_committee_member": [
+      {
+        "member_name": "Pankaj Bansal",
+        "designation": "Sr. Consultant",
+        "organisation_name": "CRID",
+        "payment_amount_per_day": 1500
+      }
+    ]
+  }
+}

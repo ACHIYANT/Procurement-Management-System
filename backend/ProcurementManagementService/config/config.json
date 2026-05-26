@@ -1,0 +1,23 @@
+{
+  "development": {
+    "username": "root",
+    "password": "Achiyant@123",
+    "database": "PMS_PROCUREMENT_DEV",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "test": {
+    "username": "pms_user",
+    "password": "YourStrongPassword123!",
+    "database": "DB_NAME_HERE",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "production": {
+    "username": "pms_user",
+    "password": "YourStrongPassword123!",
+    "database": "DB_NAME_HERE",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  }
+}

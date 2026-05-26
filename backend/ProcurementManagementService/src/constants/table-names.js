@@ -1,0 +1,110 @@
+const PROCUREMENT_EMPLOYEE_TABLE = "procurement_employees";
+const INDENT_TABLE = "indents";
+const INDENT_ITEM_TABLE = "indent_items";
+const INDENT_DOCUMENT_TABLE = "indent_documents";
+const INDENT_ITEM_EVENT_TABLE = "indent_item_events";
+const ITEM_CATEGORY_TABLE = "item_categories";
+const ITEM_SUBCATEGORY_TABLE = "item_subcategories";
+const PROCUREMENT_CASE_TABLE = "procurement_cases";
+const PROCUREMENT_CASE_ITEM_TABLE = "procurement_case_items";
+const FIRM_TABLE = "firms";
+const FIRM_ADDRESS_TABLE = "firm_addresses";
+const FIRM_CONTACT_TABLE = "firm_contacts";
+const EMPANELMENT_TABLE = "empanelments";
+const EMPANELMENT_ITEM_CATEGORY_TABLE = "empanelment_item_categories";
+const EMPANELMENT_OEM_TABLE = "empanelment_oems";
+const EMPANELMENT_EXTENSION_TABLE = "empanelment_extensions";
+const TENDER_TABLE = "tenders";
+const TENDER_ITEM_TABLE = "tender_items";
+const TENDER_EXTENSION_TABLE = "tender_submission_extensions";
+const TENDER_VENDOR_TABLE = "tender_vendors";
+const TENDER_VENDOR_ITEM_QUOTE_TABLE = "tender_vendor_item_quotes";
+const TENDER_VENDOR_ALLOCATION_EXTENSION_TABLE = "tender_vendor_allocation_extensions";
+const TENDER_VENDOR_ALLOCATION_EXTENSION_ITEM_TABLE =
+  "tender_vendor_allocation_extension_items";
+const TENDER_EMD_TABLE = "tender_emd_entries";
+const COMMITTEE_MEETING_TABLE = "committee_meetings";
+const COMMITTEE_MEMBER_TABLE = "committee_members";
+const COMMITTEE_NEGOTIATION_ENTRY_TABLE = "committee_negotiation_entries";
+const PURCHASE_ORDER_TABLE = "purchase_orders";
+const PURCHASE_ORDER_ITEM_TABLE = "purchase_order_items";
+const PURCHASE_ORDER_CONSIGNEE_TABLE = "purchase_order_consignees";
+const PURCHASE_ORDER_CONSIGNEE_ITEM_TABLE = "purchase_order_consignee_items";
+const PURCHASE_ORDER_INSPECTION_TABLE = "purchase_order_inspections";
+const PURCHASE_ORDER_INSPECTION_ITEM_TABLE = "purchase_order_inspection_items";
+const PURCHASE_ORDER_DELIVERY_BATCH_TABLE = "purchase_order_delivery_batches";
+const PURCHASE_ORDER_DELIVERY_ITEM_TABLE = "purchase_order_delivery_items";
+const PURCHASE_ORDER_INSTALLATION_BATCH_TABLE = "purchase_order_installation_batches";
+const PURCHASE_ORDER_INSTALLATION_ITEM_TABLE = "purchase_order_installation_items";
+const SELLER_INVOICE_TABLE = "seller_invoices";
+const SELLER_INVOICE_ITEM_TABLE = "seller_invoice_items";
+const PURCHASE_INVOICE_TABLE = "purchase_invoices";
+const SALE_INVOICE_TABLE = "sale_invoices";
+const SALE_INVOICE_ITEM_TABLE = "sale_invoice_items";
+const PURCHASE_ORDER_PAYMENT_TABLE = "purchase_order_payments";
+const PBG_TABLE = "pbg_entries";
+const TENDER_PBG_SETUP_TABLE = "tender_pbg_setups";
+const PBG_OBLIGATION_TABLE = "pbg_obligations";
+const PBG_RECEIPT_ALLOCATION_TABLE = "pbg_receipt_allocations";
+const DEPARTMENT_FUND_TABLE = "department_fund_entries";
+const APPROVAL_WORKFLOW_TABLE = "approval_workflows";
+const APPROVAL_WORKFLOW_LEVEL_TABLE = "approval_workflow_levels";
+const APPROVAL_REQUEST_TABLE = "approval_requests";
+const APPROVAL_REQUEST_STEP_TABLE = "approval_request_steps";
+const APPROVAL_REQUEST_PAYLOAD_TABLE = "approval_request_payloads";
+
+module.exports = {
+  PROCUREMENT_EMPLOYEE_TABLE,
+  INDENT_TABLE,
+  INDENT_ITEM_TABLE,
+  INDENT_DOCUMENT_TABLE,
+  INDENT_ITEM_EVENT_TABLE,
+  ITEM_CATEGORY_TABLE,
+  ITEM_SUBCATEGORY_TABLE,
+  PROCUREMENT_CASE_TABLE,
+  PROCUREMENT_CASE_ITEM_TABLE,
+  FIRM_TABLE,
+  FIRM_ADDRESS_TABLE,
+  FIRM_CONTACT_TABLE,
+  EMPANELMENT_TABLE,
+  EMPANELMENT_ITEM_CATEGORY_TABLE,
+  EMPANELMENT_OEM_TABLE,
+  EMPANELMENT_EXTENSION_TABLE,
+  TENDER_TABLE,
+  TENDER_ITEM_TABLE,
+  TENDER_EXTENSION_TABLE,
+  TENDER_VENDOR_TABLE,
+  TENDER_VENDOR_ITEM_QUOTE_TABLE,
+  TENDER_VENDOR_ALLOCATION_EXTENSION_TABLE,
+  TENDER_VENDOR_ALLOCATION_EXTENSION_ITEM_TABLE,
+  TENDER_EMD_TABLE,
+  COMMITTEE_MEETING_TABLE,
+  COMMITTEE_MEMBER_TABLE,
+  COMMITTEE_NEGOTIATION_ENTRY_TABLE,
+  PURCHASE_ORDER_TABLE,
+  PURCHASE_ORDER_ITEM_TABLE,
+  PURCHASE_ORDER_CONSIGNEE_TABLE,
+  PURCHASE_ORDER_CONSIGNEE_ITEM_TABLE,
+  PURCHASE_ORDER_INSPECTION_TABLE,
+  PURCHASE_ORDER_INSPECTION_ITEM_TABLE,
+  PURCHASE_ORDER_DELIVERY_BATCH_TABLE,
+  PURCHASE_ORDER_DELIVERY_ITEM_TABLE,
+  PURCHASE_ORDER_INSTALLATION_BATCH_TABLE,
+  PURCHASE_ORDER_INSTALLATION_ITEM_TABLE,
+  SELLER_INVOICE_TABLE,
+  SELLER_INVOICE_ITEM_TABLE,
+  PURCHASE_INVOICE_TABLE,
+  SALE_INVOICE_TABLE,
+  SALE_INVOICE_ITEM_TABLE,
+  PURCHASE_ORDER_PAYMENT_TABLE,
+  PBG_TABLE,
+  TENDER_PBG_SETUP_TABLE,
+  PBG_OBLIGATION_TABLE,
+  PBG_RECEIPT_ALLOCATION_TABLE,
+  DEPARTMENT_FUND_TABLE,
+  APPROVAL_WORKFLOW_TABLE,
+  APPROVAL_WORKFLOW_LEVEL_TABLE,
+  APPROVAL_REQUEST_TABLE,
+  APPROVAL_REQUEST_STEP_TABLE,
+  APPROVAL_REQUEST_PAYLOAD_TABLE,
+};
