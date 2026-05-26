@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle,
   Banknote,
   BriefcaseBusiness,
   FileCheck2,
   FileClock,
-  Layers3,
   ScrollText,
   ShieldCheck,
   WalletCards,
@@ -29,19 +27,6 @@ const label = (value) =>
     .replaceAll("_", " ")
     .replace(/\b\w/g, (match) => match.toUpperCase());
 
-const formatDateTime = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
 const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -52,24 +37,6 @@ const formatDate = (value) => {
     year: "numeric",
   });
 };
-
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="h-28 animate-pulse rounded-[30px] bg-white ring-1 ring-black/8" />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 7 }).map((_, index) => (
-          <div key={index} className="h-28 animate-pulse rounded-[24px] bg-white ring-1 ring-black/8" />
-        ))}
-      </div>
-      <div className="grid gap-4 xl:grid-cols-2">
-        {Array.from({ length: 2 }).map((_, index) => (
-          <div key={index} className="h-80 animate-pulse rounded-[24px] bg-white ring-1 ring-black/8" />
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function KpiCard({ icon: Icon, label: cardLabel, value, tone = "blue", helper }) {
   const toneMap = {
@@ -199,7 +166,24 @@ function RingChart({ title, items = [], totalLabel }) {
   const total = safeItems.reduce((sum, item) => sum + Number(item.value || 0), 0);
   const radius = 52;
   const circumference = 2 * Math.PI * radius;
-  let offsetCursor = 0;
+  const chartItems = safeItems.map((item, index) => {
+    const portion = Number(item.value || 0) / Math.max(total, 1);
+    const dash = portion * circumference;
+    const previousDash = safeItems
+      .slice(0, index)
+      .reduce(
+        (sum, current) =>
+          sum +
+          (Number(current.value || 0) / Math.max(total, 1)) * circumference,
+        0,
+      );
+
+    return {
+      ...item,
+      strokeDasharray: `${dash} ${circumference - dash}`,
+      strokeDashoffset: -previousDash,
+    };
+  });
 
   return (
     <Card className="border-0 bg-white shadow-[0_20px_50px_-40px_rgba(0,0,0,0.45)] ring-1 ring-black/8">
@@ -209,28 +193,20 @@ function RingChart({ title, items = [], totalLabel }) {
           <div className="relative flex h-40 w-40 items-center justify-center">
             <svg viewBox="0 0 140 140" className="h-40 w-40 -rotate-90">
               <circle cx="70" cy="70" r={radius} fill="none" stroke="#e2e8f0" strokeWidth="14" />
-              {safeItems.map((item) => {
-                const portion = Number(item.value || 0) / Math.max(total, 1);
-                const dash = portion * circumference;
-                const strokeDasharray = `${dash} ${circumference - dash}`;
-                const strokeDashoffset = -offsetCursor;
-                offsetCursor += dash;
-
-                return (
-                  <circle
-                    key={item.label}
-                    cx="70"
-                    cy="70"
-                    r={radius}
-                    fill="none"
-                    stroke={item.color}
-                    strokeWidth="14"
-                    strokeLinecap="round"
-                    strokeDasharray={strokeDasharray}
-                    strokeDashoffset={strokeDashoffset}
-                  />
-                );
-              })}
+              {chartItems.map((item) => (
+                <circle
+                  key={item.label}
+                  cx="70"
+                  cy="70"
+                  r={radius}
+                  fill="none"
+                  stroke={item.color}
+                  strokeWidth="14"
+                  strokeLinecap="round"
+                  strokeDasharray={item.strokeDasharray}
+                  strokeDashoffset={item.strokeDashoffset}
+                />
+              ))}
             </svg>
             <div className="absolute text-center">
               <div className="text-3xl font-semibold text-slate-950">{numberFormat(total)}</div>
@@ -400,18 +376,6 @@ export default function Dashboard() {
       { label: "PBG Claim Expiring", value: poAndPbgHealth.pbg_claim_period_expiring_in_30_days, gradient: "from-emerald-500 to-green-500" },
     ],
     [emdHealth.not_submitted, emdHealth.pending_refunds, poAndPbgHealth.pbg_claim_period_expiring_in_30_days, poAndPbgHealth.pbg_validity_expiring_in_30_days, poAndPbgHealth.purchase_orders_without_pbg],
-  );
-
-  const valueGraph = useMemo(
-    () => [
-      { label: "Indent Estimate", value: valueFlow.indent_estimated_amount, gradient: "from-blue-600 to-cyan-500" },
-      { label: "Case Estimate", value: valueFlow.procurement_case_estimated_value, gradient: "from-cyan-600 to-sky-500" },
-      { label: "Tender Value", value: valueFlow.tender_value, gradient: "from-amber-500 to-orange-500" },
-      { label: "PO Value", value: valueFlow.purchase_order_value, gradient: "from-emerald-500 to-green-500" },
-      { label: "EMD Value", value: valueFlow.emd_recorded_value, gradient: "from-slate-500 to-slate-700" },
-      { label: "PBG Value", value: valueFlow.pbg_recorded_value, gradient: "from-rose-500 to-pink-600" },
-    ],
-    [valueFlow],
   );
 
   const valueKpis = useMemo(

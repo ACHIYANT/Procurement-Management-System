@@ -514,9 +514,6 @@ const ROOT_ORDER = [
 const compareByLabel = (left, right) => left.label.localeCompare(right.label);
 
 export const getHaryanaGovernmentMasterOptions = () => {
-  const byValue = new Map(
-    HARYANA_GOVERNMENT_MASTER.map((entry) => [entry.value, entry]),
-  );
   const childrenByParent = new Map();
 
   for (const entry of HARYANA_GOVERNMENT_MASTER) {

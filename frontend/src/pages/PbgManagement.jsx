@@ -89,8 +89,6 @@ export default function PbgManagement() {
     }, 0);
 
     return () => clearTimeout(timer);
-    // The initial fetch is intentionally one-shot; submit refreshes explicitly.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubmit = async (event) => {
