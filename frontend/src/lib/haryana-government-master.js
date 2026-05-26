@@ -422,6 +422,12 @@ const HARYANA_GOVERNMENT_MASTER = [
     parent: null,
   },
   {
+    label: "Haryana Human Rights Commission",
+    value: "hhrc",
+    group: "Commission",
+    parent: null,
+  },
+  {
     label: "Maharshi Dayanand University",
     value: "mdu",
     group: "University",
