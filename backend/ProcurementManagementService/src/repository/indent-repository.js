@@ -1,5 +1,7 @@
 "use strict";
 
+const { Op } = require("sequelize");
+
 const { buildCursorWhere, buildSortOrder } = require("../utils/procurement-domain");
 const {
   Indent,
