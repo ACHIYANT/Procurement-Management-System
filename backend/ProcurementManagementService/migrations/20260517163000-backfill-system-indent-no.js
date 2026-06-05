@@ -15,22 +15,10 @@ const resolveFinancialYear = (dateValue) => {
   };
 };
 
-const organizationCode = (value) => {
-  const words = String(value || "ORG")
-    .toUpperCase()
-    .replace(/[^A-Z0-9 ]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
-  return words.slice(0, 3).map((word) => word[0]).join("") || "ORG";
-};
-
-const locationCode = (value) =>
-  String(value || "PMS").replace(/[^A-Z0-9]/gi, "").slice(0, 4).toUpperCase() || "PMS";
-
 module.exports = {
   async up(queryInterface) {
     const rows = await queryInterface.sequelize.query(
-      `SELECT id, received_date, department_name, location_scope FROM ${INDENT_TABLE} WHERE system_indent_no IS NULL ORDER BY received_date ASC, id ASC`,
+      `SELECT id, received_date FROM ${INDENT_TABLE} WHERE system_indent_no IS NULL ORDER BY received_date ASC, id ASC`,
       { type: QueryTypes.SELECT },
     );
 
@@ -39,7 +27,7 @@ module.exports = {
       const fy = resolveFinancialYear(row.received_date);
       const nextSequence = (sequenceByFy.get(fy.key) || 0) + 1;
       sequenceByFy.set(fy.key, nextSequence);
-      const systemIndentNo = `PMS/${locationCode(row.location_scope)}/${organizationCode(row.department_name)}/${fy.label}/${String(nextSequence).padStart(4, "0")}`;
+      const systemIndentNo = `PMS/${fy.label}/${String(nextSequence).padStart(4, "0")}`;
       await queryInterface.sequelize.query(
         `UPDATE ${INDENT_TABLE} SET system_indent_no = :systemIndentNo WHERE id = :id`,
         {

@@ -124,20 +124,7 @@ class IndentService {
     };
   }
 
-  buildOrganizationCode(value) {
-    const words = String(value || "ORG")
-      .toUpperCase()
-      .replace(/[^A-Z0-9 ]/g, " ")
-      .split(/\s+/)
-      .filter(Boolean);
-    const code = words
-      .slice(0, 3)
-      .map((word) => word[0])
-      .join("");
-    return code || "ORG";
-  }
-
-  async generateSystemIndentNo({ receivedDate, departmentName, locationScope }, transaction) {
+  async generateSystemIndentNo({ receivedDate }, transaction) {
     const financialYear = this.resolveFinancialYear(receivedDate);
     const sequence =
       (await this.repository.countIndentsInFinancialYear(
@@ -145,12 +132,7 @@ class IndentService {
         financialYear.endDate,
         { transaction },
       )) + 1;
-    const locationCode = String(locationScope || "PMS")
-      .replace(/[^A-Z0-9]/gi, "")
-      .slice(0, 4)
-      .toUpperCase() || "PMS";
-    const organizationCode = this.buildOrganizationCode(departmentName);
-    return `PMS/${locationCode}/${organizationCode}/${financialYear.label}/${String(sequence).padStart(4, "0")}`;
+    return `PMS/${financialYear.label}/${String(sequence).padStart(4, "0")}`;
   }
 
   async logItemEvent(
@@ -434,7 +416,7 @@ class IndentService {
 
     const indent = await this.repository.withTransaction(async (transaction) => {
       const systemIndentNo = await this.generateSystemIndentNo(
-        { receivedDate, departmentName, locationScope },
+        { receivedDate },
         transaction,
       );
       const createdIndent = await this.repository.createIndent(

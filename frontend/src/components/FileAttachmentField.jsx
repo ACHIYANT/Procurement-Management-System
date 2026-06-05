@@ -1,10 +1,13 @@
 import { Eye, Loader2, Paperclip, Trash2, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 
 import FieldError from "@/components/FieldError";
 import ViewFilePopup from "@/components/ViewFilePopup";
 import { Button } from "@/components/ui/button";
+import { isPdfFile } from "@/lib/pdf-file-utils";
 import { getStoredFileName, toProcurementFileDownloadUrl } from "@/lib/procurement-files";
+
+const PdfPageSelectionDialog = lazy(() => import("@/components/PdfPageSelectionDialog"));
 
 function helperTextForUpload(uploading, fileName, helperText) {
   if (uploading) return "Uploading file securely...";
@@ -28,18 +31,16 @@ export default function FileAttachmentField({
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [pdfSelectionFile, setPdfSelectionFile] = useState(null);
   const [uploadError, setUploadError] = useState("");
 
   const fileName = getStoredFileName(storedPath);
 
   const triggerPicker = () => fileInputRef.current?.click();
 
-  const handleFileChange = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const uploadFile = async (file) => {
     if (typeof onUpload !== "function") {
       setUploadError("File upload is not configured.");
-      event.target.value = "";
       return;
     }
 
@@ -52,8 +53,26 @@ export default function FileAttachmentField({
       setUploadError(error?.message || "File upload failed.");
     } finally {
       setUploading(false);
-      event.target.value = "";
     }
+  };
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (isPdfFile(file)) {
+      setUploadError("");
+      setPdfSelectionFile(file);
+      return;
+    }
+
+    await uploadFile(file);
+  };
+
+  const handlePdfConfirm = async (file) => {
+    setPdfSelectionFile(null);
+    await uploadFile(file);
   };
 
   return (
@@ -118,6 +137,16 @@ export default function FileAttachmentField({
           storedPath={storedPath}
           onClose={() => setPreviewOpen(false)}
         />
+      ) : null}
+      {pdfSelectionFile ? (
+        <Suspense fallback={null}>
+          <PdfPageSelectionDialog
+            file={pdfSelectionFile}
+            open={Boolean(pdfSelectionFile)}
+            onCancel={() => setPdfSelectionFile(null)}
+            onConfirm={handlePdfConfirm}
+          />
+        </Suspense>
       ) : null}
     </>
   );
