@@ -40,6 +40,13 @@ const severityOptions = [
   { value: "critical", label: "Critical" },
 ];
 
+const taskLinkTypes = [
+  { value: "", label: "No linked record" },
+  { value: "indent", label: "Indent" },
+  { value: "procurement_case", label: "Procurement Case" },
+  { value: "tender", label: "Tender" },
+];
+
 const emptyForm = {
   title: "",
   description: "",
@@ -48,8 +55,8 @@ const emptyForm = {
   priority: "medium",
   severity: "normal",
   assigned_to_employee_id: "",
-  linked_reference: "",
-  linked_url: "",
+  link_type: "",
+  linked_record_id: "",
 };
 
 const pad = (value) => String(value).padStart(2, "0");
@@ -127,6 +134,70 @@ const normalizeTasks = (data) => (Array.isArray(data) ? data : data?.rows || [])
 
 const getEmployeeName = (employee) =>
   employee?.employee_name || employee?.fullname || employee?.name || `Employee #${employee?.id}`;
+
+const getIndentLabel = (indent) => {
+  const reference = indent?.system_indent_no || indent?.indent_no || `Indent #${indent?.id}`;
+  const department = indent?.department_name ? ` - ${indent.department_name}` : "";
+  return `${reference}${department}`;
+};
+
+const getProcurementCaseLabel = (procurementCase) => {
+  const reference = procurementCase?.case_no || `Case #${procurementCase?.id}`;
+  const title = procurementCase?.title ? ` - ${procurementCase.title}` : "";
+  return `${reference}${title}`;
+};
+
+const getTenderLabel = (tender) => {
+  const reference =
+    tender?.portal_bid_no ||
+    tender?.tender_reference_no ||
+    tender?.portal_tender_id ||
+    `Tender #${tender?.id}`;
+  const title = tender?.tender_title ? ` - ${tender.tender_title}` : "";
+  return `${reference}${title}`;
+};
+
+const buildLinkOption = (type, record) => {
+  if (!record?.id) return null;
+
+  if (type === "indent") {
+    return {
+      id: String(record.id),
+      label: getIndentLabel(record),
+      module_key: "indents",
+      entity_type: "indent",
+      entity_id: String(record.id),
+      linked_reference: getIndentLabel(record),
+      linked_url: `/indents/${record.id}`,
+    };
+  }
+
+  if (type === "procurement_case") {
+    return {
+      id: String(record.id),
+      label: getProcurementCaseLabel(record),
+      module_key: "procurementCases",
+      entity_type: "procurement_case",
+      entity_id: String(record.id),
+      linked_reference: getProcurementCaseLabel(record),
+      linked_url: `/procurement-cases/${record.id}`,
+    };
+  }
+
+  if (type === "tender") {
+    return {
+      id: String(record.id),
+      label: getTenderLabel(record),
+      module_key: "tenders",
+      entity_type: "tender",
+      entity_id: String(record.id),
+      linked_reference: getTenderLabel(record),
+      linked_url: `/tenders/${record.id}`,
+    };
+  }
+
+  return null;
+};
 
 const isTaskOverdue = (task) => {
   if (!task?.due_at || ["completed", "cancelled"].includes(task.status)) return false;
@@ -263,6 +334,11 @@ export default function WorkDesk() {
   const [profile] = useState(() => getCurrentUserProfile());
   const [tasks, setTasks] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [linkedRecords, setLinkedRecords] = useState({
+    indents: [],
+    procurementCases: [],
+    tenders: [],
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState("list");
@@ -299,12 +375,20 @@ export default function WorkDesk() {
         params.set("employee_id", currentEmployeeId);
       }
 
-      const [nextTasks, nextEmployees] = await Promise.all([
+      const [nextTasks, nextEmployees, nextIndents, nextCases, nextTenders] = await Promise.all([
         procurementRequest(`/work-tasks?${params.toString()}`),
         procurementRequest("/procurement-employees?activeOnly=true"),
+        procurementRequest("/indents?cursorMode=true&limit=250"),
+        procurementRequest("/procurement-cases?cursorMode=true&limit=250"),
+        procurementRequest("/tenders?cursorMode=true&limit=250"),
       ]);
       setTasks(normalizeTasks(nextTasks));
       setEmployees(Array.isArray(nextEmployees) ? nextEmployees : normalizeTasks(nextEmployees));
+      setLinkedRecords({
+        indents: normalizeTasks(nextIndents),
+        procurementCases: normalizeTasks(nextCases),
+        tenders: normalizeTasks(nextTenders),
+      });
     } catch (error) {
       setPopup({
         open: true,
@@ -353,14 +437,41 @@ export default function WorkDesk() {
     };
   }, [tasks]);
 
+  const currentLinkOptions = useMemo(() => {
+    const sourceRows = {
+      indent: linkedRecords.indents,
+      procurement_case: linkedRecords.procurementCases,
+      tender: linkedRecords.tenders,
+    }[form.link_type] || [];
+
+    return sourceRows.map((record) => buildLinkOption(form.link_type, record)).filter(Boolean);
+  }, [form.link_type, linkedRecords]);
+
+  const selectedLink = useMemo(
+    () => currentLinkOptions.find((option) => option.id === String(form.linked_record_id || "")) || null,
+    [currentLinkOptions, form.linked_record_id],
+  );
+
   const updateForm = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }));
+  };
+
+  const updateLinkType = (event) => {
+    setForm((current) => ({
+      ...current,
+      link_type: event.target.value,
+      linked_record_id: "",
+    }));
   };
 
   const handleCreate = async (event) => {
     event.preventDefault();
     if (!form.title.trim()) {
       setPopup({ open: true, type: "error", message: "Task title is required." });
+      return;
+    }
+    if (form.link_type && !selectedLink) {
+      setPopup({ open: true, type: "error", message: "Please select the linked record." });
       return;
     }
 
@@ -382,6 +493,11 @@ export default function WorkDesk() {
         assigned_to_name: assignedEmployee ? getEmployeeName(assignedEmployee) : actorPayload.actor_name,
         due_at: form.due_at || null,
         reminder_at: form.reminder_at || null,
+        module_key: selectedLink?.module_key || null,
+        entity_type: selectedLink?.entity_type || null,
+        entity_id: selectedLink?.entity_id || null,
+        linked_reference: selectedLink?.linked_reference || null,
+        linked_url: selectedLink?.linked_url || null,
       });
       setForm(emptyForm);
       setPopup({ open: true, type: "success", message: "Task created successfully." });
@@ -586,14 +702,43 @@ export default function WorkDesk() {
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <label className="space-y-1.5">
-                    <span className="text-sm font-medium text-black/70">Linked reference</span>
-                    <Input value={form.linked_reference} onChange={updateForm("linked_reference")} placeholder="Tender no., PO no., letter no." />
+                    <span className="text-sm font-medium text-black/70">Link module</span>
+                    <select
+                      value={form.link_type}
+                      onChange={updateLinkType}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      {taskLinkTypes.map((option) => (
+                        <option key={option.value || "none"} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="space-y-1.5">
-                    <span className="text-sm font-medium text-black/70">Linked URL</span>
-                    <Input value={form.linked_url} onChange={updateForm("linked_url")} placeholder="/tenders/12" />
+                    <span className="text-sm font-medium text-black/70">Linked record</span>
+                    <select
+                      value={form.linked_record_id}
+                      onChange={updateForm("linked_record_id")}
+                      disabled={!form.link_type}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                    >
+                      <option value="">
+                        {form.link_type ? "Select record" : "Select module first"}
+                      </option>
+                      {currentLinkOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </div>
+                {selectedLink ? (
+                  <div className="rounded-2xl bg-[#f5f5f7] px-3 py-2 text-sm text-[#17324d]">
+                    This task will open: <span className="font-semibold">{selectedLink.label}</span>
+                  </div>
+                ) : null}
               </div>
 
               <Button
