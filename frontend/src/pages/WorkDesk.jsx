@@ -50,8 +50,10 @@ const taskLinkTypes = [
 const emptyForm = {
   title: "",
   description: "",
-  due_at: "",
-  reminder_at: "",
+  due_date: "",
+  due_time: "",
+  reminder_date: "",
+  reminder_time: "",
   priority: "medium",
   severity: "normal",
   assigned_to_employee_id: "",
@@ -90,6 +92,11 @@ const formatDateTime = (value) => {
     hour: "2-digit",
     minute: "2-digit",
   });
+};
+
+const combineDateAndTime = (date, time, fallbackTime = "17:00") => {
+  if (!date) return null;
+  return `${date}T${time || fallbackTime}`;
 };
 
 const monthLabel = (date) =>
@@ -491,8 +498,8 @@ export default function WorkDesk() {
         origin_label: assignedToSelf ? "Self Created" : "Assigned by Higher Authority",
         assigned_to_employee_id: form.assigned_to_employee_id || currentEmployeeId,
         assigned_to_name: assignedEmployee ? getEmployeeName(assignedEmployee) : actorPayload.actor_name,
-        due_at: form.due_at || null,
-        reminder_at: form.reminder_at || null,
+        due_at: combineDateAndTime(form.due_date, form.due_time),
+        reminder_at: combineDateAndTime(form.reminder_date, form.reminder_time, "09:00"),
         module_key: selectedLink?.module_key || null,
         entity_type: selectedLink?.entity_type || null,
         entity_id: selectedLink?.entity_id || null,
@@ -644,12 +651,22 @@ export default function WorkDesk() {
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <label className="space-y-1.5">
-                    <span className="text-sm font-medium text-black/70">Due date and time</span>
-                    <Input type="datetime-local" value={form.due_at} onChange={updateForm("due_at")} />
+                    <span className="text-sm font-medium text-black/70">Due date</span>
+                    <Input type="date" value={form.due_date} onChange={updateForm("due_date")} />
                   </label>
                   <label className="space-y-1.5">
-                    <span className="text-sm font-medium text-black/70">Reminder date and time</span>
-                    <Input type="datetime-local" value={form.reminder_at} onChange={updateForm("reminder_at")} />
+                    <span className="text-sm font-medium text-black/70">Due time</span>
+                    <Input type="time" value={form.due_time} onChange={updateForm("due_time")} disabled={!form.due_date} />
+                  </label>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="space-y-1.5">
+                    <span className="text-sm font-medium text-black/70">Reminder date</span>
+                    <Input type="date" value={form.reminder_date} onChange={updateForm("reminder_date")} />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-sm font-medium text-black/70">Reminder time</span>
+                    <Input type="time" value={form.reminder_time} onChange={updateForm("reminder_time")} disabled={!form.reminder_date} />
                   </label>
                 </div>
 
