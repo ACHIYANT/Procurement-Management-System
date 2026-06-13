@@ -3,6 +3,7 @@ import "./App.css";
 import Login from "./pages/Login";
 import ActivateAccount from "./pages/ActivateAccount";
 import Dashboard from "./pages/Dashboard";
+import WorkDesk from "./pages/WorkDesk";
 import EmdManagement from "./pages/EmdManagement";
 import EmdList from "./pages/EmdList";
 import PbgList from "./pages/PbgList";
@@ -51,6 +52,7 @@ function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<ProtectedRoute moduleKey="dashboard"><Dashboard /></ProtectedRoute>} />
+            <Route path="/my-work" element={<ProtectedRoute moduleKey="workTasks"><WorkDesk /></ProtectedRoute>} />
             <Route path="/emd" element={<ProtectedRoute moduleKey="emd"><EmdList /></ProtectedRoute>} />
             <Route path="/emd/new" element={<ProtectedRoute moduleKey="emd" action="create"><EmdManagement /></ProtectedRoute>} />
             <Route path="/emd/:id/edit" element={<ProtectedRoute moduleKey="emd" action="manage"><EmdEdit /></ProtectedRoute>} />
