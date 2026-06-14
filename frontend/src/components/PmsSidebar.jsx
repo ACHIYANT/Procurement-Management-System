@@ -21,6 +21,7 @@ import {
   ReceiptIndianRupee,
   Settings,
   ShieldCheck,
+  Sparkles,
   Tags,
   X,
 } from "lucide-react";
@@ -143,6 +144,12 @@ const navigationGroups = [
         path: "/item-categories",
         icon: Tags,
         roles: [PMS_ROLES.ASSOCIATE, PMS_ROLES.PROCUREMENT_OFFICER, PMS_ROLES.APPROVER],
+      },
+      {
+        label: "Specification Templates",
+        path: "/specification-templates",
+        icon: Sparkles,
+        roles: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
       },
       {
         label: "Administration",

@@ -599,6 +599,7 @@ export default function PdfPageSelectionDialog({
   open,
   onCancel,
   onConfirm,
+  confirmLabel = "Upload selected pages",
 }) {
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -839,7 +840,11 @@ export default function PdfPageSelectionDialog({
       const uploadFile = allPagesSelected
         ? file
         : await createSelectedPdfFile(file, selectedPages);
-      await onConfirm(uploadFile);
+      await onConfirm(uploadFile, {
+        allPagesSelected,
+        pageCount,
+        selectedPages,
+      });
     } catch (processError) {
       setError(processError?.message || "Unable to create selected-pages PDF.");
     } finally {
@@ -1167,7 +1172,7 @@ export default function PdfPageSelectionDialog({
             className="bg-blue-700 text-white hover:bg-blue-800"
           >
             {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Upload selected pages
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

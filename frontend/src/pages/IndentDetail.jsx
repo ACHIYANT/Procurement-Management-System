@@ -1085,6 +1085,19 @@ export default function IndentDetail() {
                           </div>
                         </div>
 
+                        {item.specification ? (
+                          <div
+                            className={`mt-2 rounded-[20px] bg-[#f5f5f7] ring-1 ring-black/6 ${isOfficerFocusedView ? "px-3 py-2" : "px-4 py-3"}`}
+                          >
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-black/42">
+                              Specification
+                            </p>
+                            <p className="mt-1 text-sm leading-6 text-black/68">
+                              {item.specification}
+                            </p>
+                          </div>
+                        ) : null}
+
                         {item.return_reason ? (
                           <div
                             className={`mt-2 rounded-[20px] bg-[#fff6f6] ring-1 ring-rose-200 ${isOfficerFocusedView ? "px-3 py-2" : "px-4 py-3"}`}

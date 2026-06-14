@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import PopupMessage from "@/components/PopupMessage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { postProcurement, procurementRequest } from "@/lib/procurement-api";
+import { hasAnyRole, getCurrentUserRoles, PMS_ROLES } from "@/lib/roles";
 
 const blankSubcategory = () => ({ subcategory_name: "" });
 
 export default function ItemCategoryMaster() {
+  const [roles] = useState(() => getCurrentUserRoles());
   const [categories, setCategories] = useState([]);
   const [form, setForm] = useState({
     category_name: "",
@@ -27,6 +30,10 @@ export default function ItemCategoryMaster() {
   const selectedCategory = categories.find(
     (category) => String(category.id) === String(existingForm.category_id),
   );
+  const canManageSpecificationTemplates = hasAnyRole(roles, [
+    PMS_ROLES.ADMIN,
+    PMS_ROLES.SUPER_ADMIN,
+  ]);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -231,6 +238,14 @@ export default function ItemCategoryMaster() {
               <p className="mt-2 max-w-3xl text-sm leading-6 text-white/70 md:text-[15px]">
                 Maintain procurement item categories and subcategories for indent item classification.
               </p>
+              {canManageSpecificationTemplates ? (
+                <Link
+                  to="/specification-templates"
+                  className="mt-5 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90"
+                >
+                  Manage Specification Templates
+                </Link>
+              ) : null}
             </div>
           </div>
 
