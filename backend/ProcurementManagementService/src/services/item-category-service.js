@@ -17,6 +17,9 @@ const normalizeBoolean = (value, fallback = true) => {
   return Boolean(value);
 };
 
+const normalizeNameKey = (value) =>
+  String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+
 class ItemCategoryService {
   constructor() {
     this.repository = new ItemCategoryRepository();
@@ -38,9 +41,31 @@ class ItemCategoryService {
       .filter((item) => item.subcategory_name);
   }
 
+  ensureUniqueSubcategoryPayload(subcategories = []) {
+    const seen = new Set();
+    for (const subcategory of subcategories) {
+      const key = normalizeNameKey(subcategory.subcategory_name);
+      if (!key) continue;
+      if (seen.has(key)) {
+        const error = new Error(`Duplicate subcategory "${subcategory.subcategory_name}" in the same request.`);
+        error.statusCode = 400;
+        throw error;
+      }
+      seen.add(key);
+    }
+  }
+
   async create(payload = {}) {
     const categoryName = requireValue(payload, "category_name", "Category name");
     const subcategories = this.normalizeSubcategories(payload.subcategories);
+    this.ensureUniqueSubcategoryPayload(subcategories);
+
+    const existingCategory = await this.repository.findCategoryByName(categoryName);
+    if (existingCategory) {
+      const error = new Error("This category already exists. Please add new subcategories under the existing category.");
+      error.statusCode = 409;
+      throw error;
+    }
 
     const created = await this.repository.withTransaction(async (transaction) => {
       const category = await this.repository.createCategory(
@@ -93,6 +118,21 @@ class ItemCategoryService {
     if (!subcategories.length) {
       const error = new Error("At least one subcategory name is required.");
       error.statusCode = 400;
+      throw error;
+    }
+    this.ensureUniqueSubcategoryPayload(subcategories);
+
+    const existingNames = new Set(
+      (Array.isArray(category.subcategories) ? category.subcategories : [])
+        .map((subcategory) => normalizeNameKey(subcategory.subcategory_name))
+        .filter(Boolean),
+    );
+    const duplicate = subcategories.find((subcategory) =>
+      existingNames.has(normalizeNameKey(subcategory.subcategory_name)),
+    );
+    if (duplicate) {
+      const error = new Error(`"${duplicate.subcategory_name}" already exists under ${category.category_name}. Please enter only new subcategories.`);
+      error.statusCode = 409;
       throw error;
     }
 

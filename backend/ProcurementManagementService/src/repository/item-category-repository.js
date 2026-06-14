@@ -24,6 +24,13 @@ class ItemCategoryRepository {
     return ItemCategory.findByPk(id, { include });
   }
 
+  async findCategoryByName(categoryName) {
+    return ItemCategory.findOne({
+      where: { category_name: categoryName },
+      include: categoryInclude,
+    });
+  }
+
   async createCategory(payload, options = {}) {
     return ItemCategory.create(payload, options);
   }

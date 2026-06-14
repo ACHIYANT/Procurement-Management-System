@@ -15,9 +15,18 @@ export default function ItemCategoryMaster() {
     category_name: "",
     subcategories: [blankSubcategory()],
   });
+  const [existingForm, setExistingForm] = useState({
+    category_id: "",
+    subcategories: [blankSubcategory()],
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingExisting, setSavingExisting] = useState(false);
   const [popup, setPopup] = useState({ open: false, type: "info", message: "" });
+
+  const selectedCategory = categories.find(
+    (category) => String(category.id) === String(existingForm.category_id),
+  );
 
   const loadCategories = useCallback(async () => {
     try {
@@ -66,10 +75,76 @@ export default function ItemCategoryMaster() {
     }));
   };
 
+  const updateExistingSubcategory = (index, value) => {
+    setExistingForm((current) => ({
+      ...current,
+      subcategories: current.subcategories.map((entry, entryIndex) =>
+        entryIndex === index ? { ...entry, subcategory_name: value } : entry,
+      ),
+    }));
+  };
+
+  const addExistingSubcategory = () => {
+    setExistingForm((current) => ({
+      ...current,
+      subcategories: [...current.subcategories, blankSubcategory()],
+    }));
+  };
+
+  const removeExistingSubcategory = (index) => {
+    setExistingForm((current) => ({
+      ...current,
+      subcategories:
+        current.subcategories.length === 1
+          ? [blankSubcategory()]
+          : current.subcategories.filter((_, entryIndex) => entryIndex !== index),
+    }));
+  };
+
+  const validateSubcategoryNames = (subcategories, existingNames = []) => {
+    const names = subcategories
+      .map((entry) => String(entry.subcategory_name || "").trim())
+      .filter(Boolean);
+    const seen = new Set();
+    for (const name of names) {
+      const key = name.toLowerCase();
+      if (seen.has(key)) return `"${name}" is repeated in this request.`;
+      seen.add(key);
+    }
+
+    const existingSet = new Set(existingNames.map((name) => String(name || "").trim().toLowerCase()));
+    const duplicate = names.find((name) => existingSet.has(name.toLowerCase()));
+    if (duplicate) return `"${duplicate}" already exists under the selected category.`;
+    return "";
+  };
+
   const submit = async (event) => {
     event.preventDefault();
     if (!String(form.category_name || "").trim()) {
       setPopup({ open: true, type: "warning", message: "Category name is required." });
+      return;
+    }
+    const existingCategory = categories.find(
+      (category) =>
+        String(category.category_name || "").trim().toLowerCase() ===
+        String(form.category_name || "").trim().toLowerCase(),
+    );
+    if (existingCategory) {
+      setExistingForm({
+        category_id: String(existingCategory.id),
+        subcategories: [blankSubcategory()],
+      });
+      setPopup({
+        open: true,
+        type: "warning",
+        message: "This category already exists. Use Add Subcategories below.",
+      });
+      return;
+    }
+
+    const duplicateMessage = validateSubcategoryNames(form.subcategories);
+    if (duplicateMessage) {
+      setPopup({ open: true, type: "warning", message: duplicateMessage });
       return;
     }
 
@@ -95,6 +170,52 @@ export default function ItemCategoryMaster() {
     }
   };
 
+  const submitExistingSubcategories = async (event) => {
+    event.preventDefault();
+    if (!existingForm.category_id) {
+      setPopup({ open: true, type: "warning", message: "Please select an existing category." });
+      return;
+    }
+
+    const subcategories = existingForm.subcategories.filter((entry) =>
+      String(entry.subcategory_name || "").trim(),
+    );
+    if (!subcategories.length) {
+      setPopup({ open: true, type: "warning", message: "Enter at least one new subcategory." });
+      return;
+    }
+
+    const duplicateMessage = validateSubcategoryNames(
+      subcategories,
+      (selectedCategory?.subcategories || []).map((subcategory) => subcategory.subcategory_name),
+    );
+    if (duplicateMessage) {
+      setPopup({ open: true, type: "warning", message: duplicateMessage });
+      return;
+    }
+
+    setSavingExisting(true);
+    try {
+      await postProcurement(`/item-categories/${existingForm.category_id}/subcategories`, {
+        subcategories,
+      });
+      setExistingForm((current) => ({
+        ...current,
+        subcategories: [blankSubcategory()],
+      }));
+      setPopup({ open: true, type: "success", message: "Subcategories added to existing category." });
+      await loadCategories();
+    } catch (error) {
+      setPopup({
+        open: true,
+        type: "error",
+        message: error.message || "Unable to add subcategories.",
+      });
+    } finally {
+      setSavingExisting(false);
+    }
+  };
+
   return (
     <>
       <div className="min-h-full bg-transparent px-4 py-7 text-[#1d1d1f]">
@@ -114,6 +235,7 @@ export default function ItemCategoryMaster() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
+            <div className="space-y-5">
             <Card className="border-0 bg-white shadow-[0_20px_50px_-40px_rgba(0,0,0,0.45)] ring-1 ring-black/8">
               <CardContent className="space-y-5">
                 <div>
@@ -177,6 +299,96 @@ export default function ItemCategoryMaster() {
                 </form>
               </CardContent>
             </Card>
+
+            <Card className="border-0 bg-white shadow-[0_20px_50px_-40px_rgba(0,0,0,0.45)] ring-1 ring-black/8">
+              <CardContent className="space-y-5">
+                <div>
+                  <h2 className="text-[1.35rem] font-semibold tracking-[-0.03em]">
+                    Add Subcategories
+                  </h2>
+                  <p className="mt-1 text-sm text-black/56">
+                    Select an existing category and add only the new subcategories.
+                  </p>
+                </div>
+
+                <form className="space-y-4" onSubmit={submitExistingSubcategories}>
+                  <label className="space-y-1">
+                    <span className="text-sm font-medium text-black/70">
+                      Existing Category
+                    </span>
+                    <select
+                      value={existingForm.category_id}
+                      onChange={(event) =>
+                        setExistingForm({
+                          category_id: event.target.value,
+                          subcategories: [blankSubcategory()],
+                        })
+                      }
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-[#1d1d1f] shadow-sm outline-none transition focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10"
+                    >
+                      <option value="">Select category</option>
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.category_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {selectedCategory ? (
+                    <div className="rounded-2xl bg-[#f5f5f7] px-4 py-3 text-sm text-black/58 ring-1 ring-black/6">
+                      Existing:{" "}
+                      {(selectedCategory.subcategories || []).length
+                        ? selectedCategory.subcategories
+                            .map((subcategory) => subcategory.subcategory_name)
+                            .join(", ")
+                        : "No subcategories yet"}
+                    </div>
+                  ) : null}
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-black/70">
+                        New Subcategories
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addExistingSubcategory}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add
+                      </Button>
+                    </div>
+                    {existingForm.subcategories.map((entry, index) => (
+                      <div key={index} className="flex gap-2">
+                        <Input
+                          value={entry.subcategory_name}
+                          onChange={(event) =>
+                            updateExistingSubcategory(index, event.target.value)
+                          }
+                          placeholder="ADF Document Scanner"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => removeExistingSubcategory(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Button className="w-full rounded-full bg-[#0071e3] text-white hover:bg-[#0066cc]" disabled={savingExisting}>
+                    {savingExisting ? "Adding..." : "Add Subcategories"}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+            </div>
 
             <Card className="border-0 bg-white shadow-[0_20px_50px_-40px_rgba(0,0,0,0.45)] ring-1 ring-black/8">
               <CardContent className="space-y-4">
