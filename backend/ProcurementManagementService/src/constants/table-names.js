@@ -5,6 +5,7 @@ const INDENT_DOCUMENT_TABLE = "indent_documents";
 const INDENT_ITEM_EVENT_TABLE = "indent_item_events";
 const ITEM_CATEGORY_TABLE = "item_categories";
 const ITEM_SUBCATEGORY_TABLE = "item_subcategories";
+const ITEM_SPECIFICATION_TEMPLATE_TABLE = "item_specification_templates";
 const PROCUREMENT_CASE_TABLE = "procurement_cases";
 const PROCUREMENT_CASE_ITEM_TABLE = "procurement_case_items";
 const FIRM_TABLE = "firms";
@@ -66,6 +67,7 @@ module.exports = {
   INDENT_ITEM_EVENT_TABLE,
   ITEM_CATEGORY_TABLE,
   ITEM_SUBCATEGORY_TABLE,
+  ITEM_SPECIFICATION_TEMPLATE_TABLE,
   PROCUREMENT_CASE_TABLE,
   PROCUREMENT_CASE_ITEM_TABLE,
   FIRM_TABLE,

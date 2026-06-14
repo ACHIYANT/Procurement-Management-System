@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Plus,
   Search,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -23,6 +24,15 @@ import {
   procurementRequest,
   uploadProcurementFile,
 } from "@/lib/procurement-api";
+import { extractTextFromPdfFile } from "@/lib/pdf-text-assist";
+import {
+  buildSpecificationAssistFromText,
+  buildSmartFillPatch,
+  getMissingSpecificationHints,
+  getSpecificationConflictWarnings,
+  getSpecificationSuggestionGroups,
+  mergeSpecificationParts,
+} from "@/lib/smart-specification-templates";
 import {
   buildRequiredErrors,
   hasErrors,
@@ -54,6 +64,7 @@ const createBlankItem = () => ({
   item_name: "",
   quantity: "",
   unit: "",
+  specification: "",
   specific_make_required: "no",
   preferred_make: "",
   remarks: "",
@@ -102,6 +113,7 @@ const mapIndentToForm = (indent = {}) => ({
         item_name: item.item_name || "",
         quantity: toQuantityInput(item.quantity),
         unit: item.unit || "",
+        specification: item.specification || "",
         specific_make_required: item.specific_make_required ? "yes" : "no",
         preferred_make: item.preferred_make || "",
         remarks: item.remarks || "",
@@ -283,6 +295,18 @@ export default function IndentForm() {
   const [currentUser] = useState(() => getCurrentUserProfile());
   const [form, setForm] = useState(initialForm);
   const [itemCategories, setItemCategories] = useState([]);
+  const [itemSpecificationTemplates, setItemSpecificationTemplates] = useState([]);
+  const [pendingFiles, setPendingFiles] = useState({
+    indent_document_path: null,
+    specification_document_path: null,
+  });
+  const [pdfAssist, setPdfAssist] = useState({
+    loading: false,
+    message: "",
+    sourceLabel: "",
+    suggestions: [],
+    templates: [],
+  });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState("");
   const [popup, setPopup] = useState({
@@ -296,13 +320,17 @@ export default function IndentForm() {
   useEffect(() => {
     const timer = setTimeout(async () => {
       try {
-        const data = await procurementRequest("/item-categories?activeOnly=true");
-        setItemCategories(Array.isArray(data) ? data : []);
+        const [categories, templates] = await Promise.all([
+          procurementRequest("/item-categories?activeOnly=true"),
+          procurementRequest("/item-specification-templates?activeOnly=true"),
+        ]);
+        setItemCategories(Array.isArray(categories) ? categories : []);
+        setItemSpecificationTemplates(Array.isArray(templates) ? templates : []);
       } catch (error) {
         setPopup({
           open: true,
           type: "error",
-          message: error.message || "Unable to load item categories.",
+          message: error.message || "Unable to load item masters.",
         });
       }
     }, 0);
@@ -334,6 +362,10 @@ export default function IndentForm() {
           return;
         }
         setForm(mapIndentToForm(data));
+        setPendingFiles({
+          indent_document_path: null,
+          specification_document_path: null,
+        });
         setErrors({});
       } catch (error) {
         if (!ignore) {
@@ -382,6 +414,68 @@ export default function IndentForm() {
     return uploadProcurementFile("/files/upload/indent_specification_document", formData);
   };
 
+  const runPdfSpecificationAssist = async (file, sourceLabel) => {
+    if (!file || file.type !== "application/pdf") return;
+
+    setPdfAssist({
+      loading: true,
+      message: `Reading selected pages from ${sourceLabel}...`,
+      sourceLabel,
+      suggestions: [],
+      templates: [],
+    });
+
+    try {
+      const text = await extractTextFromPdfFile(file);
+      if (!String(text || "").trim()) {
+        setPdfAssist({
+          loading: false,
+          message: "No selectable text found in the selected PDF pages. If this is a scanned image PDF, true OCR will need a server-side OCR service.",
+          sourceLabel,
+          suggestions: [],
+          templates: [],
+        });
+        return;
+      }
+
+      const assist = buildSpecificationAssistFromText(
+        text,
+        itemCategories,
+        itemSpecificationTemplates,
+      );
+      setPdfAssist({
+        loading: false,
+        message: assist.suggestions.length
+          ? "Specification-like details found. Click only the chips needed for each item."
+          : "Text was read, but no specification-like details were detected. You can still type details manually.",
+        sourceLabel,
+        suggestions: assist.suggestions,
+        templates: assist.matchedTemplates,
+      });
+    } catch (error) {
+      setPdfAssist({
+        loading: false,
+        message: error.message || "Unable to read text from selected PDF pages.",
+        sourceLabel,
+        suggestions: [],
+        templates: [],
+      });
+    }
+  };
+
+  const handleDeferredFileReady = (field, sourceLabel) => (file) => {
+    setPendingFiles((current) => ({ ...current, [field]: file }));
+    setErrors((current) => ({ ...current, [field]: undefined }));
+
+    if (field === "indent_document_path" || field === "specification_document_path") {
+      runPdfSpecificationAssist(file, sourceLabel);
+    }
+  };
+
+  const clearDeferredFile = (field) => {
+    setPendingFiles((current) => ({ ...current, [field]: null }));
+  };
+
   const update = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }));
     setErrors((current) => ({ ...current, [field]: undefined }));
@@ -414,6 +508,96 @@ export default function IndentForm() {
     });
   };
 
+  const appendSpecificationSuggestion = (index, suggestion) => {
+    const text = String(suggestion || "").trim();
+    if (!text) return;
+    const currentItem = form.items[index] || {};
+    const currentSpecification = String(currentItem.specification || "").trim();
+    const exists = currentSpecification.toLowerCase().includes(text.toLowerCase());
+    const nextSpecification = exists
+      ? currentSpecification
+      : currentSpecification
+        ? `${currentSpecification}, ${text}`
+        : text;
+    const conflictWarnings = getSpecificationConflictWarnings(nextSpecification);
+
+    setForm((current) => ({
+      ...current,
+      items: current.items.map((item, itemIndex) => {
+        if (itemIndex !== index) return item;
+        if (exists) return item;
+        return {
+          ...item,
+          specification: nextSpecification,
+        };
+      }),
+    }));
+
+    if (conflictWarnings.length) {
+      setPopup({
+        open: true,
+        type: "warning",
+        message: conflictWarnings[0].message,
+      });
+    }
+  };
+
+  const smartFillItem = (index) => {
+    const item = form.items[index];
+    const smartPatch = buildSmartFillPatch(
+      item,
+      itemCategories,
+      itemSpecificationTemplates,
+    );
+
+    if (!smartPatch) {
+      setPopup({
+        open: true,
+        type: "info",
+        message: "No smart match found yet. Add category, subcategory, or paste a fuller item line first.",
+      });
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      items: current.items.map((entry, itemIndex) => {
+        if (itemIndex !== index) return entry;
+        return {
+          ...entry,
+          category_id: smartPatch.category_id || entry.category_id,
+          subcategory_id: smartPatch.subcategory_id || entry.subcategory_id,
+          item_name: smartPatch.item_name || entry.item_name,
+          unit: entry.unit || "Nos",
+          specification: mergeSpecificationParts(
+            entry.specification,
+            smartPatch.specificationParts,
+          ),
+        };
+      }),
+    }));
+    setErrors((current) => {
+      const next = { ...current };
+      if (Array.isArray(next.items) && next.items[index]) {
+        next.items = [...next.items];
+        next.items[index] = {
+          ...next.items[index],
+          category_id: undefined,
+          subcategory_id: undefined,
+          item_name: undefined,
+        };
+      }
+      return next;
+    });
+    setPopup({
+      open: true,
+      type: "success",
+      message: smartPatch.specificationParts.length
+        ? `${smartPatch.profileTitle} details applied. Please review once.`
+        : `${smartPatch.profileTitle} matched. Select the exact specification chips needed.`,
+    });
+  };
+
   const addItem = () => {
     setForm((current) => ({
       ...current,
@@ -440,6 +624,9 @@ export default function IndentForm() {
       { name: "indent_document_path", label: "Indent document" },
       { name: "location_scope", label: "Location scope" },
     ]);
+    if (pendingFiles.indent_document_path) {
+      delete fieldErrors.indent_document_path;
+    }
 
     const itemErrors = form.items.map((item) => {
       const nextErrors = buildRequiredErrors(item, [
@@ -474,6 +661,7 @@ export default function IndentForm() {
     const hasHeader = headerFields.some((field) =>
       String(form[field] || "").trim(),
     );
+    const hasPendingFile = Object.values(pendingFiles).some(Boolean);
     const hasItem = form.items.some((item) =>
       [
         item.category_id,
@@ -481,26 +669,44 @@ export default function IndentForm() {
         item.item_name,
         item.quantity,
         item.unit,
+        item.specification,
         item.preferred_make,
         item.remarks,
       ].some((value) => String(value || "").trim()),
     );
-    return hasHeader || hasItem;
+    return hasHeader || hasPendingFile || hasItem;
   };
 
-  const buildPayload = (draft) => ({
-    ...form,
+  const buildPayload = (draft, sourceForm = form) => ({
+    ...sourceForm,
     save_as_draft: draft,
     status: draft ? "draft" : "received",
     actor_empcode: currentUser?.empcode || "",
     actor_name: currentUser?.fullName || "",
     location_scope: "PANCHKULA",
-    cfms_no: form.cfms_no || null,
-    items: form.items.map((item) => ({
+    cfms_no: sourceForm.cfms_no || null,
+    items: sourceForm.items.map((item) => ({
       ...item,
       administrative_approval_required: item.specific_make_required === "yes",
     })),
   });
+
+  const uploadPendingIndentFiles = async () => {
+    const uploadedPaths = {};
+
+    if (pendingFiles.indent_document_path) {
+      const uploaded = await uploadIndentDocument(pendingFiles.indent_document_path);
+      uploadedPaths.indent_document_path = uploaded?.path || "";
+    }
+
+    if (pendingFiles.specification_document_path) {
+      const uploaded = await uploadSpecificationDocument(pendingFiles.specification_document_path);
+      uploadedPaths.specification_document_path = uploaded?.path || "";
+    }
+
+    if (!Object.keys(uploadedPaths).length) return form;
+    return { ...form, ...uploadedPaths };
+  };
 
   const saveIndent = async ({ draft }) => {
     if (draft && !hasDraftContent()) {
@@ -527,13 +733,18 @@ export default function IndentForm() {
 
     setSaving(draft ? "draft" : "submit");
     try {
-      const payload = buildPayload(draft);
+      const formWithUploadedFiles = await uploadPendingIndentFiles();
+      const payload = buildPayload(draft, formWithUploadedFiles);
       const data = isEditMode
         ? await patchProcurement(`/indents/${id}`, payload)
         : await postProcurement("/indents", payload);
 
       if (draft) {
         setForm(mapIndentToForm(data));
+        setPendingFiles({
+          indent_document_path: null,
+          specification_document_path: null,
+        });
         setPopup({
           open: true,
           type: "success",
@@ -684,9 +895,12 @@ export default function IndentForm() {
                     onChange={(value) =>
                       setForm((current) => ({ ...current, indent_document_path: value }))
                     }
-                    onUpload={uploadIndentDocument}
+                    deferUpload
+                    pendingFileName={pendingFiles.indent_document_path?.name || ""}
+                    onFileReady={handleDeferredFileReady("indent_document_path", "Indent Upload")}
+                    onPendingClear={() => clearDeferredFile("indent_document_path")}
                     error={errors.indent_document_path}
-                    helperText="Upload the inward indent letter received from the indenting organization."
+                    helperText="Select the inward indent letter now. It will upload when you save the indent."
                   />
                 </div>
 
@@ -700,11 +914,41 @@ export default function IndentForm() {
                         specification_document_path: value,
                       }))
                     }
-                    onUpload={uploadSpecificationDocument}
-                    helperText="Optional. Upload now if available, or add it later from the indent detail page."
+                    deferUpload
+                    pendingFileName={pendingFiles.specification_document_path?.name || ""}
+                    onFileReady={handleDeferredFileReady("specification_document_path", "Specification File")}
+                    onPendingClear={() => clearDeferredFile("specification_document_path")}
+                    helperText="Select the specification pages now. It will upload when you save the indent."
                     emptyLabel="No specification file uploaded yet"
                   />
                 </div>
+
+                {(pdfAssist.loading || pdfAssist.message || pdfAssist.suggestions.length) ? (
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-950">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">
+                          PDF specification assist
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-blue-900/75">
+                          {pdfAssist.loading
+                            ? pdfAssist.message
+                            : pdfAssist.message || "Detected details from selected PDF pages."}
+                        </p>
+                        {pdfAssist.templates.length ? (
+                          <p className="mt-1 text-xs text-blue-900/65">
+                            Matched templates: {pdfAssist.templates.join(", ")}
+                          </p>
+                        ) : null}
+                      </div>
+                      {pdfAssist.suggestions.length ? (
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-100">
+                          {pdfAssist.suggestions.length} detected chips
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -728,7 +972,21 @@ export default function IndentForm() {
                     </Button>
                   </div>
 
-                  {form.items.map((item, index) => (
+                  {form.items.map((item, index) => {
+                    const specificationGroups = getSpecificationSuggestionGroups(
+                      item,
+                      itemCategories,
+                      itemSpecificationTemplates,
+                    );
+                    const missingSpecificationHints = getMissingSpecificationHints(
+                      item,
+                      itemCategories,
+                      itemSpecificationTemplates,
+                    );
+                    const specificationConflictWarnings =
+                      getSpecificationConflictWarnings(item.specification);
+
+                    return (
                     <div
                       key={index}
                       className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
@@ -873,8 +1131,128 @@ export default function IndentForm() {
                           </>
                         ) : null}
                       </div>
+
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+                              <span>Item Specification</span>
+                              <InfoTooltip content="Type the technical details manually, or click quick suggestions below to add common specifications." />
+                            </span>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Paste a full item line here or in Item Name, then use Smart Fill.
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 rounded-full border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                            onClick={() => smartFillItem(index)}
+                          >
+                            <Sparkles className="h-4 w-4" />
+                            Smart Fill
+                          </Button>
+                        </div>
+
+                        <div className="mt-3">
+                          <textarea
+                            rows={3}
+                            value={item.specification}
+                            onChange={updateItem(index, "specification")}
+                            placeholder="Example: Intel i7 14th Gen, 16GB RAM, 1TB SSD, Windows 11 Pro"
+                            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                          />
+                        </div>
+
+                        {specificationConflictWarnings.length ? (
+                          <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2">
+                            <p className="text-xs font-semibold text-rose-700">
+                              Possible conflicting specification
+                            </p>
+                            <div className="mt-2 space-y-1">
+                              {specificationConflictWarnings.map((warning) => (
+                                <p key={warning.type} className="text-xs leading-5 text-rose-700">
+                                  {warning.message}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {missingSpecificationHints.length ? (
+                          <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2">
+                            <p className="text-xs font-semibold text-amber-800">
+                              Suggested missing details
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {missingSpecificationHints.map((hint) => (
+                                <span
+                                  key={hint}
+                                  className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200"
+                                >
+                                  {hint}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {pdfAssist.suggestions.length ? (
+                          <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">
+                              Detected From Selected PDF
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-blue-900/70">
+                              Click only the details that belong to this item.
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {pdfAssist.suggestions.map((suggestion) => (
+                                <button
+                                  key={`pdf-${index}-${suggestion}`}
+                                  type="button"
+                                  onClick={() => appendSpecificationSuggestion(index, suggestion)}
+                                  className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                                >
+                                  + {suggestion}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div className="mt-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                            Quick Add
+                          </p>
+                          <div className="mt-2 space-y-3">
+                            {specificationGroups.map((group) => (
+                              <div key={group.label}>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                  {group.label}
+                                </p>
+                                <div className="mt-1.5 flex flex-wrap gap-2">
+                                  {group.suggestions.map((suggestion) => (
+                                    <button
+                                      key={`${group.label}-${suggestion}`}
+                                      type="button"
+                                      onClick={() =>
+                                        appendSpecificationSuggestion(index, suggestion)
+                                      }
+                                      className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-200 hover:bg-blue-100"
+                                    >
+                                      + {suggestion}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {form.items.some((item) => item.specific_make_required === "yes") ? (
