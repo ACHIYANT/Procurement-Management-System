@@ -142,6 +142,9 @@ class IndentRepository {
           [Op.gte]: startDate,
           [Op.lte]: endDate,
         },
+        status: {
+          [Op.ne]: "draft",
+        },
       },
       transaction,
     });
@@ -157,6 +160,13 @@ class IndentRepository {
 
   async bulkCreateItems(payload, { transaction } = {}) {
     return IndentItem.bulkCreate(payload, { transaction });
+  }
+
+  async deleteItemsByIndentId(indentId, { transaction } = {}) {
+    return IndentItem.destroy({
+      where: { indent_id: indentId },
+      transaction,
+    });
   }
 
   async findIndentItemByPk(id, { transaction } = {}) {

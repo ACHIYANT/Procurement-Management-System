@@ -3,6 +3,7 @@ import "./App.css";
 import Login from "./pages/Login";
 import ActivateAccount from "./pages/ActivateAccount";
 import Dashboard from "./pages/Dashboard";
+import WorkDesk from "./pages/WorkDesk";
 import EmdManagement from "./pages/EmdManagement";
 import EmdList from "./pages/EmdList";
 import PbgList from "./pages/PbgList";
@@ -51,6 +52,7 @@ function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<ProtectedRoute moduleKey="dashboard"><Dashboard /></ProtectedRoute>} />
+            <Route path="/my-work" element={<ProtectedRoute moduleKey="workTasks"><WorkDesk /></ProtectedRoute>} />
             <Route path="/emd" element={<ProtectedRoute moduleKey="emd"><EmdList /></ProtectedRoute>} />
             <Route path="/emd/new" element={<ProtectedRoute moduleKey="emd" action="create"><EmdManagement /></ProtectedRoute>} />
             <Route path="/emd/:id/edit" element={<ProtectedRoute moduleKey="emd" action="manage"><EmdEdit /></ProtectedRoute>} />
@@ -63,6 +65,7 @@ function App() {
             <Route path="/reconciliation/:departmentName" element={<ProtectedRoute moduleKey="reconciliation"><ReconciliationDepartmentDetail /></ProtectedRoute>} />
             <Route path="/indents" element={<ProtectedRoute moduleKey="indents"><IndentList /></ProtectedRoute>} />
             <Route path="/indents/new" element={<ProtectedRoute moduleKey="indents" action="create"><IndentForm /></ProtectedRoute>} />
+            <Route path="/indents/:id/edit" element={<ProtectedRoute moduleKey="indents" action="create"><IndentForm /></ProtectedRoute>} />
             <Route path="/indents/:id" element={<ProtectedRoute moduleKey="indents"><IndentDetail /></ProtectedRoute>} />
             <Route path="/procurement-cases" element={<ProtectedRoute moduleKey="procurementCases"><ProcurementCaseList /></ProtectedRoute>} />
             <Route path="/procurement-cases/new" element={<ProtectedRoute moduleKey="procurementCases" action="create" allowAdminOverride={false}><ProcurementCaseForm /></ProtectedRoute>} />

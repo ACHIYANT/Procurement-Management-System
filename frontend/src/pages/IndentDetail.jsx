@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Layers3, RotateCcw, Save, SendToBack } from "lucide-react";
+import { ArrowLeft, Layers3, Pencil, RotateCcw, Save, SendToBack } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import AppLoader from "@/components/AppLoader";
@@ -396,9 +396,14 @@ export default function IndentDetail() {
     isOfficerFocusedView &&
     visibleItems.length > 0 &&
     visibleItems.every((item) => Number(item?.estimated_amount || 0) > 0);
+  const isDraftIndent = String(indent?.status || "").toLowerCase() === "draft";
   const canShowCreateProcurementCase =
+    !isDraftIndent &&
     canCreateProcurementCase &&
     (!isOfficerFocusedView || canOfficerCreateProcurementCase);
+  const canEditDraft =
+    isDraftIndent &&
+    (isAdmin || roles.includes(PMS_ROLES.INDENT_INITIATOR));
 
   const setEstimateField = (itemId, field, value, item = null) => {
     setEstimateForms((current) => ({
@@ -459,7 +464,7 @@ export default function IndentDetail() {
         >
           <p>
             <span className="font-semibold">PMS Indent No.:</span>{" "}
-            {indent?.system_indent_no || "Generating"}
+            {indent?.system_indent_no || (isDraftIndent ? "Pending until submit" : "Generating")}
           </p>
           <p>
             <span className="font-semibold">Letter Ref.:</span>{" "}
@@ -790,7 +795,7 @@ export default function IndentDetail() {
                   Indent Workflow
                 </p>
                 <h1 className="mt-2 max-w-5xl text-[2.15rem] font-semibold tracking-[-0.04em] text-white md:text-[3.2rem] md:leading-[1.03]">
-                  {indent?.indent_no}
+                  {indent?.indent_no || indent?.system_indent_no || `Draft Indent #${indent?.id}`}
                 </h1>
                 <p className="mt-2 max-w-4xl text-[15px] text-white/66 md:text-[17px]">
                   Indenting Organization: {indent?.department_name || "NA"} • CFMS No. {indent?.cfms_no || "NA"}
@@ -830,8 +835,18 @@ export default function IndentDetail() {
               </div>
 
               <div className="shrink-0 space-y-3 lg:pl-8">
-                {timeline.length || canShowCreateProcurementCase ? (
+                {timeline.length || canShowCreateProcurementCase || canEditDraft ? (
                   <div className="flex flex-wrap gap-2 lg:justify-end">
+                    {canEditDraft ? (
+                      <Button
+                        type="button"
+                        className="rounded-full bg-white text-[#1d1d1f] hover:bg-white/90"
+                        onClick={() => navigate(`/indents/${indent?.id}/edit`)}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Continue Draft
+                      </Button>
+                    ) : null}
                     {timeline.length ? (
                       <Button
                         type="button"

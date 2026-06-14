@@ -52,6 +52,11 @@ const APPROVAL_WORKFLOW_LEVEL_TABLE = "approval_workflow_levels";
 const APPROVAL_REQUEST_TABLE = "approval_requests";
 const APPROVAL_REQUEST_STEP_TABLE = "approval_request_steps";
 const APPROVAL_REQUEST_PAYLOAD_TABLE = "approval_request_payloads";
+const WORK_TASK_TABLE = "work_tasks";
+const WORK_TASK_ASSIGNEE_TABLE = "work_task_assignees";
+const WORK_TASK_COMMENT_TABLE = "work_task_comments";
+const WORK_TASK_ACTIVITY_TABLE = "work_task_activities";
+const WORK_TASK_ATTACHMENT_TABLE = "work_task_attachments";
 
 module.exports = {
   PROCUREMENT_EMPLOYEE_TABLE,
@@ -107,4 +112,9 @@ module.exports = {
   APPROVAL_REQUEST_TABLE,
   APPROVAL_REQUEST_STEP_TABLE,
   APPROVAL_REQUEST_PAYLOAD_TABLE,
+  WORK_TASK_TABLE,
+  WORK_TASK_ASSIGNEE_TABLE,
+  WORK_TASK_COMMENT_TABLE,
+  WORK_TASK_ACTIVITY_TABLE,
+  WORK_TASK_ATTACHMENT_TABLE,
 };

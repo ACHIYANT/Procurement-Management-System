@@ -61,16 +61,15 @@ module.exports = (sequelize, DataTypes) => {
       },
       item_name: {
         type: DataTypes.STRING(180),
-        allowNull: false,
-        validate: { notEmpty: true },
+        allowNull: true,
       },
       quantity: {
         type: DataTypes.DECIMAL(15, 2),
-        allowNull: false,
+        allowNull: true,
       },
       unit: {
         type: DataTypes.STRING(40),
-        allowNull: false,
+        allowNull: true,
       },
       specification: {
         type: DataTypes.TEXT,

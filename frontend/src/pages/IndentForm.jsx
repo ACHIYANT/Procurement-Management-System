@@ -8,7 +8,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import FileAttachmentField from "@/components/FileAttachmentField";
 import FieldError from "@/components/FieldError";
@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getHaryanaGovernmentMasterTree } from "@/lib/haryana-government-master";
 import {
+  patchProcurement,
   postProcurement,
   procurementRequest,
   uploadProcurementFile,
@@ -72,6 +73,41 @@ const initialForm = {
   remarks: "",
   items: [createBlankItem()],
 };
+
+const toDateInput = (value) => (value ? String(value).slice(0, 10) : "");
+
+const toQuantityInput = (value) => {
+  if (value === undefined || value === null || value === "") return "";
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? String(numeric) : String(value);
+};
+
+const mapIndentToForm = (indent = {}) => ({
+  indent_no: indent.indent_no || "",
+  indent_date: toDateInput(indent.indent_date),
+  department_name: indent.department_name || "",
+  cfms_no: indent.cfms_no || "",
+  received_date: toDateInput(indent.received_date),
+  indent_document_path: indent.indent_document_path || "",
+  specification_document_path: indent.specification_document_path || "",
+  administrative_approval_document_path:
+    indent.administrative_approval_document_path || "",
+  administrative_approval_remarks: indent.administrative_approval_remarks || "",
+  location_scope: indent.location_scope || "PANCHKULA",
+  remarks: indent.remarks || "",
+  items: Array.isArray(indent.items) && indent.items.length
+    ? indent.items.map((item) => ({
+        category_id: item.category_id ? String(item.category_id) : "",
+        subcategory_id: item.subcategory_id ? String(item.subcategory_id) : "",
+        item_name: item.item_name || "",
+        quantity: toQuantityInput(item.quantity),
+        unit: item.unit || "",
+        specific_make_required: item.specific_make_required ? "yes" : "no",
+        preferred_make: item.preferred_make || "",
+        remarks: item.remarks || "",
+      }))
+    : [createBlankItem()],
+});
 
 function Field({ label: title, children, error }) {
   return (
@@ -242,11 +278,13 @@ function DepartmentPicker({ value, onChange, error, options }) {
 
 export default function IndentForm() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEditMode = Boolean(id);
   const [currentUser] = useState(() => getCurrentUserProfile());
   const [form, setForm] = useState(initialForm);
   const [itemCategories, setItemCategories] = useState([]);
   const [errors, setErrors] = useState({});
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState("");
   const [popup, setPopup] = useState({
     open: false,
     type: "info",
@@ -271,6 +309,48 @@ export default function IndentForm() {
 
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!isEditMode) {
+      const timer = setTimeout(() => {
+        setForm(initialForm);
+        setErrors({});
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+
+    let ignore = false;
+    const timer = setTimeout(async () => {
+      try {
+        const data = await procurementRequest(`/indents/${id}`);
+        if (ignore) return;
+        if (String(data?.status || "").toLowerCase() !== "draft") {
+          setPopup({
+            open: true,
+            type: "info",
+            message: "This indent is already submitted and cannot be edited as a draft.",
+          });
+          navigate(`/indents/${id}`, { replace: true });
+          return;
+        }
+        setForm(mapIndentToForm(data));
+        setErrors({});
+      } catch (error) {
+        if (!ignore) {
+          setPopup({
+            open: true,
+            type: "error",
+            message: error.message || "Unable to load draft indent.",
+          });
+        }
+      }
+    }, 0);
+
+    return () => {
+      ignore = true;
+      clearTimeout(timer);
+    };
+  }, [id, isEditMode, navigate]);
 
   const uploadIndentDocument = async (file) => {
     const formData = new FormData();
@@ -351,9 +431,7 @@ export default function IndentForm() {
     }));
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
+  const buildFinalValidationErrors = () => {
     const fieldErrors = buildRequiredErrors(form, [
       { name: "indent_no", label: "Indent number" },
       { name: "indent_date", label: "Indent date" },
@@ -371,34 +449,102 @@ export default function IndentForm() {
         { name: "quantity", label: "Quantity" },
         { name: "unit", label: "Unit" },
       ]);
-        if (item.specific_make_required === "yes" && !String(item.preferred_make || "").trim()) {
+      if (item.specific_make_required === "yes" && !String(item.preferred_make || "").trim()) {
         nextErrors.preferred_make = "Specific make / company is required.";
       }
       return nextErrors;
     });
 
-    const validationErrors = { ...fieldErrors, items: itemErrors };
-    setErrors(validationErrors);
+    return { fieldErrors, itemErrors, validationErrors: { ...fieldErrors, items: itemErrors } };
+  };
 
-    if (
-      hasErrors(fieldErrors) ||
-      itemErrors.some((itemError) => hasErrors(itemError))
-    )
-      return;
+  const hasDraftContent = () => {
+    const headerFields = [
+      "indent_no",
+      "indent_date",
+      "department_name",
+      "cfms_no",
+      "received_date",
+      "indent_document_path",
+      "specification_document_path",
+      "administrative_approval_document_path",
+      "administrative_approval_remarks",
+      "remarks",
+    ];
+    const hasHeader = headerFields.some((field) =>
+      String(form[field] || "").trim(),
+    );
+    const hasItem = form.items.some((item) =>
+      [
+        item.category_id,
+        item.subcategory_id,
+        item.item_name,
+        item.quantity,
+        item.unit,
+        item.preferred_make,
+        item.remarks,
+      ].some((value) => String(value || "").trim()),
+    );
+    return hasHeader || hasItem;
+  };
 
-    setSaving(true);
-    try {
-      const data = await postProcurement("/indents", {
-        ...form,
-        actor_empcode: currentUser?.empcode || "",
-        actor_name: currentUser?.fullName || "",
-        location_scope: "PANCHKULA",
-        cfms_no: form.cfms_no || null,
-        items: form.items.map((item) => ({
-          ...item,
-          administrative_approval_required: item.specific_make_required === "yes",
-        })),
+  const buildPayload = (draft) => ({
+    ...form,
+    save_as_draft: draft,
+    status: draft ? "draft" : "received",
+    actor_empcode: currentUser?.empcode || "",
+    actor_name: currentUser?.fullName || "",
+    location_scope: "PANCHKULA",
+    cfms_no: form.cfms_no || null,
+    items: form.items.map((item) => ({
+      ...item,
+      administrative_approval_required: item.specific_make_required === "yes",
+    })),
+  });
+
+  const saveIndent = async ({ draft }) => {
+    if (draft && !hasDraftContent()) {
+      setPopup({
+        open: true,
+        type: "error",
+        message: "Enter at least one indent detail before saving a draft.",
       });
+      return;
+    }
+
+    if (!draft) {
+      const { fieldErrors, itemErrors, validationErrors } = buildFinalValidationErrors();
+      setErrors(validationErrors);
+
+      if (
+        hasErrors(fieldErrors) ||
+        itemErrors.some((itemError) => hasErrors(itemError))
+      )
+        return;
+    } else {
+      setErrors({});
+    }
+
+    setSaving(draft ? "draft" : "submit");
+    try {
+      const payload = buildPayload(draft);
+      const data = isEditMode
+        ? await patchProcurement(`/indents/${id}`, payload)
+        : await postProcurement("/indents", payload);
+
+      if (draft) {
+        setForm(mapIndentToForm(data));
+        setPopup({
+          open: true,
+          type: "success",
+          message: "Draft indent saved.",
+        });
+        if (!isEditMode) {
+          navigate(`/indents/${data.id}/edit`, { replace: true });
+        }
+        return;
+      }
+
       navigate(`/indents/${data.id}`, { replace: true });
     } catch (error) {
       setPopup({
@@ -407,8 +553,17 @@ export default function IndentForm() {
         message: error.message || "Unable to save indent.",
       });
     } finally {
-      setSaving(false);
+      setSaving("");
     }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    await saveIndent({ draft: false });
+  };
+
+  const handleSaveDraft = async () => {
+    await saveIndent({ draft: true });
   };
 
   return (
@@ -429,11 +584,13 @@ export default function IndentForm() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-white/58">
               Indent Master
             </p>
-            <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.04em] text-white md:text-[2.45rem]">Add Indent</h1>
+            <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.04em] text-white md:text-[2.45rem]">
+              {isEditMode ? "Edit Draft Indent" : "Add Indent"}
+            </h1>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-white/70 md:text-[15px]">
-              Record the inward indent letter and its item lines. Officer
-              assignment, item return, and estimated value work will move
-              through the indent channel after creation.
+              {isEditMode
+                ? "Continue a saved draft. Submit only when the inward letter, mandatory dates, upload, and item lines are complete."
+                : "Record the inward indent letter and its item lines. Save as draft if details are still being collected."}
             </p>
             </div>
           </div>
@@ -762,13 +919,22 @@ export default function IndentForm() {
                   />
                 </Field>
 
-                <div className="flex justify-end">
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    disabled={Boolean(saving)}
+                    onClick={handleSaveDraft}
+                  >
+                    {saving === "draft" ? "Saving Draft..." : "Save Draft"}
+                  </Button>
                   <Button
                     type="submit"
                     className="bg-blue-700 text-white hover:bg-blue-800"
-                    disabled={saving}
+                    disabled={Boolean(saving)}
                   >
-                    {saving ? "Saving..." : "Save Indent"}
+                    {saving === "submit" ? "Submitting..." : "Submit Indent"}
                   </Button>
                 </div>
               </form>
