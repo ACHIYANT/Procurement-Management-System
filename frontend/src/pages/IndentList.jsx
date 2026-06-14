@@ -182,6 +182,16 @@ export default function IndentList() {
     }
   };
 
+  const openIndentForUpdate = (id) => {
+    const row = rows.find((item) => String(item?.id) === String(id));
+    const isDraft = String(row?.status || "").toLowerCase() === "draft";
+    if (isDraft && (canAccessFeature(roles, "indents", "create") || isIndentInitiator)) {
+      navigate(`/indents/${id}/edit`);
+      return;
+    }
+    navigate(`/indents/${id}`);
+  };
+
   const queueOnlyContent = isProcurementOfficer && workQueue ? (
     <div className="min-h-full bg-[#f5f5f7] px-4 py-7 text-[#1d1d1f]">
       <div className="mx-auto max-w-7xl space-y-5">
@@ -308,7 +318,7 @@ export default function IndentList() {
         loading={loading}
         onAdd={() => navigate("/indents/new")}
         addLabel="Add Indent"
-        onUpdate={(id) => navigate(`/indents/${id}`)}
+        onUpdate={openIndentForUpdate}
         onSearch={setSearch}
         searchValue={search}
         selectedRows={selectedRows}

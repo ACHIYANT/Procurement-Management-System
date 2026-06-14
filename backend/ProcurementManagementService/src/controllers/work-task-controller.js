@@ -81,6 +81,20 @@ const create = async (req, res) => {
   }
 };
 
+const updateTask = async (req, res) => {
+  try {
+    const data = await service.updateTask(req.params.id, req.body || {}, resolveActor(req));
+    return res.status(200).json({
+      success: true,
+      message: "Work task updated successfully.",
+      data,
+      err: {},
+    });
+  } catch (error) {
+    return sendError(res, error, "Unable to update work task.");
+  }
+};
+
 const updateStatus = async (req, res) => {
   try {
     const data = await service.updateStatus(
@@ -114,6 +128,34 @@ const returnTask = async (req, res) => {
   }
 };
 
+const snoozeTask = async (req, res) => {
+  try {
+    const data = await service.snoozeTask(req.params.id, req.body || {}, resolveActor(req));
+    return res.status(200).json({
+      success: true,
+      message: "Work task reminder snoozed successfully.",
+      data,
+      err: {},
+    });
+  } catch (error) {
+    return sendError(res, error, "Unable to snooze work task.");
+  }
+};
+
+const reassignTask = async (req, res) => {
+  try {
+    const data = await service.reassignTask(req.params.id, req.body || {}, resolveActor(req));
+    return res.status(200).json({
+      success: true,
+      message: "Work task reassigned successfully.",
+      data,
+      err: {},
+    });
+  } catch (error) {
+    return sendError(res, error, "Unable to reassign work task.");
+  }
+};
+
 const addComment = async (req, res) => {
   try {
     const data = await service.addComment(req.params.id, req.body || {}, resolveActor(req));
@@ -128,11 +170,59 @@ const addComment = async (req, res) => {
   }
 };
 
+const addAttachment = async (req, res) => {
+  try {
+    const data = await service.addAttachment(req.params.id, req.body || {}, resolveActor(req));
+    return res.status(201).json({
+      success: true,
+      message: "Work task attachment added successfully.",
+      data,
+      err: {},
+    });
+  } catch (error) {
+    return sendError(res, error, "Unable to add work task attachment.");
+  }
+};
+
+const syncSystemTasks = async (req, res) => {
+  try {
+    const data = await service.syncSystemTasks(resolveActor(req));
+    return res.status(200).json({
+      success: true,
+      message: "System work tasks synced successfully.",
+      data,
+      err: {},
+    });
+  } catch (error) {
+    return sendError(res, error, "Unable to sync system work tasks.");
+  }
+};
+
+const escalateOverdueTasks = async (_req, res) => {
+  try {
+    const data = await service.escalateOverdueTasks();
+    return res.status(200).json({
+      success: true,
+      message: "Overdue work tasks escalated successfully.",
+      data,
+      err: {},
+    });
+  } catch (error) {
+    return sendError(res, error, "Unable to escalate overdue work tasks.");
+  }
+};
+
 module.exports = {
+  addAttachment,
   addComment,
   create,
+  escalateOverdueTasks,
   getById,
   list,
+  reassignTask,
   returnTask,
+  snoozeTask,
+  syncSystemTasks,
+  updateTask,
   updateStatus,
 };

@@ -44,6 +44,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "work_task_id",
         as: "activities",
       });
+      WorkTask.hasMany(models.WorkTaskAttachment, {
+        foreignKey: "work_task_id",
+        as: "attachments",
+      });
     }
   }
 
@@ -65,6 +69,7 @@ module.exports = (sequelize, DataTypes) => {
       due_at: { type: DataTypes.DATE, allowNull: true },
       reminder_at: { type: DataTypes.DATE, allowNull: true },
       reminder_sound: { type: DataTypes.STRING(60), allowNull: false, defaultValue: "soft_bell" },
+      reminder_frequency: { type: DataTypes.STRING(40), allowNull: false, defaultValue: "once" },
       repeat_rule: { type: DataTypes.STRING(80), allowNull: true },
       tags_json: {
         type: DataTypes.TEXT,
@@ -96,6 +101,11 @@ module.exports = (sequelize, DataTypes) => {
       returned_by_employee_id: { type: DataTypes.INTEGER, allowNull: true },
       return_reason: { type: DataTypes.STRING(120), allowNull: true },
       return_remarks: { type: DataTypes.TEXT, allowNull: true },
+      escalation_status: { type: DataTypes.STRING(40), allowNull: false, defaultValue: "none" },
+      escalated_at: { type: DataTypes.DATE, allowNull: true },
+      escalated_to_employee_id: { type: DataTypes.INTEGER, allowNull: true },
+      escalated_to_name: { type: DataTypes.STRING(160), allowNull: true },
+      escalation_reason: { type: DataTypes.TEXT, allowNull: true },
       last_activity_at: { type: DataTypes.DATE, allowNull: true },
     },
     {

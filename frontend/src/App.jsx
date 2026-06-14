@@ -65,6 +65,7 @@ function App() {
             <Route path="/reconciliation/:departmentName" element={<ProtectedRoute moduleKey="reconciliation"><ReconciliationDepartmentDetail /></ProtectedRoute>} />
             <Route path="/indents" element={<ProtectedRoute moduleKey="indents"><IndentList /></ProtectedRoute>} />
             <Route path="/indents/new" element={<ProtectedRoute moduleKey="indents" action="create"><IndentForm /></ProtectedRoute>} />
+            <Route path="/indents/:id/edit" element={<ProtectedRoute moduleKey="indents" action="create"><IndentForm /></ProtectedRoute>} />
             <Route path="/indents/:id" element={<ProtectedRoute moduleKey="indents"><IndentDetail /></ProtectedRoute>} />
             <Route path="/procurement-cases" element={<ProtectedRoute moduleKey="procurementCases"><ProcurementCaseList /></ProtectedRoute>} />
             <Route path="/procurement-cases/new" element={<ProtectedRoute moduleKey="procurementCases" action="create" allowAdminOverride={false}><ProcurementCaseForm /></ProtectedRoute>} />

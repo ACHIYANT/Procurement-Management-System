@@ -4,6 +4,7 @@ const {
   WorkTask,
   WorkTaskActivity,
   WorkTaskAssignee,
+  WorkTaskAttachment,
   WorkTaskComment,
 } = require("../../models");
 
@@ -27,22 +28,44 @@ const taskIncludes = [
     as: "activities",
     include: [{ model: ProcurementEmployee, as: "actor_employee" }],
   },
+  {
+    model: WorkTaskAttachment,
+    as: "attachments",
+    include: [{ model: ProcurementEmployee, as: "uploaded_by_employee" }],
+  },
 ];
 
 class WorkTaskRepository {
   listTasks({
     where = {},
     assigneeEmployeeId = null,
+    participantEmployeeId = null,
     from = null,
     to = null,
     limit = 300,
   } = {}) {
     const taskWhere = { ...where };
+    const participantId = participantEmployeeId ? Number(participantEmployeeId) : null;
 
     if (from || to) {
       taskWhere.due_at = {};
       if (from) taskWhere.due_at[Op.gte] = from;
       if (to) taskWhere.due_at[Op.lte] = to;
+    }
+
+    if (participantId) {
+      taskWhere[Op.and] = [
+        ...(Array.isArray(taskWhere[Op.and]) ? taskWhere[Op.and] : []),
+        {
+          [Op.or]: [
+            { created_by_employee_id: participantId },
+            { assigned_by_employee_id: participantId },
+            { completed_by_employee_id: participantId },
+            { returned_by_employee_id: participantId },
+            { "$assignees.assigned_to_employee_id$": participantId },
+          ],
+        },
+      ];
     }
 
     const include = taskIncludes.map((entry) => ({ ...entry }));
@@ -61,9 +84,11 @@ class WorkTaskRepository {
         ["id", "DESC"],
         [{ model: WorkTaskComment, as: "comments" }, "created_at", "ASC"],
         [{ model: WorkTaskActivity, as: "activities" }, "created_at", "ASC"],
+        [{ model: WorkTaskAttachment, as: "attachments" }, "created_at", "DESC"],
       ],
       limit,
       distinct: true,
+      subQuery: false,
     });
   }
 
@@ -74,7 +99,22 @@ class WorkTaskRepository {
       order: [
         [{ model: WorkTaskComment, as: "comments" }, "created_at", "ASC"],
         [{ model: WorkTaskActivity, as: "activities" }, "created_at", "ASC"],
+        [{ model: WorkTaskAttachment, as: "attachments" }, "created_at", "DESC"],
       ],
+    });
+  }
+
+  findActiveSystemTask({ systemRuleCode, entityType, entityId }, transaction) {
+    return WorkTask.findOne({
+      where: {
+        origin_type: "system",
+        system_rule_code: systemRuleCode,
+        entity_type: entityType,
+        entity_id: String(entityId),
+        status: { [Op.in]: ["open", "in_progress", "returned", "reassigned"] },
+      },
+      include: taskIncludes,
+      transaction,
     });
   }
 
@@ -104,6 +144,10 @@ class WorkTaskRepository {
 
   createActivity(payload, transaction) {
     return WorkTaskActivity.create(payload, { transaction });
+  }
+
+  createAttachment(payload, transaction) {
+    return WorkTaskAttachment.create(payload, { transaction });
   }
 }
 

@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const routes = require("./routes");
+const { startWorkTaskScheduler } = require("./services/work-task-scheduler");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -31,4 +32,5 @@ app.use((error, _req, res, _next) => {
 
 app.listen(PORT, () => {
   console.log(`ProcurementManagementService started on port ${PORT}`);
+  startWorkTaskScheduler();
 });
