@@ -1,5 +1,4 @@
 let pdfjsPromise = null;
-let pdfWorkerPort = null;
 
 const loadPdfJs = async () => {
   if (!pdfjsPromise) {
@@ -7,12 +6,8 @@ const loadPdfJs = async () => {
       import("pdfjs-dist"),
       import("pdfjs-dist/build/pdf.worker.min.mjs?worker&inline"),
     ]).then(([pdfjs, workerModule]) => {
-      if (!pdfWorkerPort) {
-        const PdfWorker = workerModule.default;
-        pdfWorkerPort = new PdfWorker();
-      }
-      pdfjs.GlobalWorkerOptions.workerPort = pdfWorkerPort;
-      return pdfjs;
+      const PdfWorker = workerModule.default;
+      return { pdfjs, PdfWorker };
     });
   }
 
@@ -22,14 +17,16 @@ const loadPdfJs = async () => {
 export const extractTextFromPdfFile = async (file, { maxPages = 30 } = {}) => {
   if (!file) return "";
 
-  const pdfjs = await loadPdfJs();
+  const { pdfjs, PdfWorker } = await loadPdfJs();
   let sourceUrl = "";
   let loadingTask = null;
   let pdf = null;
+  let pdfWorker = null;
 
   try {
     sourceUrl = URL.createObjectURL(file);
-    loadingTask = pdfjs.getDocument({ url: sourceUrl });
+    pdfWorker = new pdfjs.PDFWorker({ port: new PdfWorker() });
+    loadingTask = pdfjs.getDocument({ url: sourceUrl, worker: pdfWorker });
     pdf = await loadingTask.promise;
     const pageLimit = Math.min(pdf.numPages || 0, maxPages);
     const pages = [];
@@ -46,8 +43,15 @@ export const extractTextFromPdfFile = async (file, { maxPages = 30 } = {}) => {
 
     return pages.join("\n");
   } finally {
-    await pdf?.destroy?.();
-    loadingTask?.destroy?.();
-    if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+    try {
+      if (pdf?.destroy) {
+        await pdf.destroy();
+      } else {
+        await loadingTask?.destroy?.();
+      }
+    } finally {
+      pdfWorker?.destroy?.();
+      if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+    }
   }
 };
