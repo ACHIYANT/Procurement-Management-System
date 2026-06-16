@@ -1,13 +1,17 @@
 import { Eye, Loader2, Paperclip, Trash2, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 
 import FieldError from "@/components/FieldError";
 import ViewFilePopup from "@/components/ViewFilePopup";
 import { Button } from "@/components/ui/button";
+import { isPdfFile } from "@/lib/pdf-file-utils";
 import { getStoredFileName, toProcurementFileDownloadUrl } from "@/lib/procurement-files";
 
-function helperTextForUpload(uploading, fileName, helperText) {
+const PdfPageSelectionDialog = lazy(() => import("@/components/PdfPageSelectionDialog"));
+
+function helperTextForUpload(uploading, fileName, helperText, hasPendingFile) {
   if (uploading) return "Uploading file securely...";
+  if (hasPendingFile) return helperText || "Selected. This file will upload when you save.";
   if (fileName) return helperText || "View or download available.";
   return helperText || "Allowed: PDF, image, Word, Excel, CSV, TXT";
 }
@@ -17,29 +21,43 @@ export default function FileAttachmentField({
   storedPath,
   onChange,
   onUpload,
+  onFileReady,
+  onPendingClear,
   error,
   helperText,
   accept = ".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt",
   readOnly = false,
   allowReplace = true,
   allowClear = true,
+  deferUpload = false,
   emptyLabel = "No file uploaded yet",
+  pendingFileName = "",
 }) {
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [pdfSelectionFile, setPdfSelectionFile] = useState(null);
   const [uploadError, setUploadError] = useState("");
 
-  const fileName = getStoredFileName(storedPath);
+  const storedFileName = getStoredFileName(storedPath);
+  const fileName = pendingFileName || storedFileName;
+  const hasPendingFile = Boolean(pendingFileName);
 
   const triggerPicker = () => fileInputRef.current?.click();
 
-  const handleFileChange = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const uploadFile = async (file, metadata = {}) => {
+    if (deferUpload) {
+      if (typeof onFileReady !== "function") {
+        setUploadError("Deferred file handling is not configured.");
+        return;
+      }
+      setUploadError("");
+      onFileReady(file, metadata);
+      return;
+    }
+
     if (typeof onUpload !== "function") {
       setUploadError("File upload is not configured.");
-      event.target.value = "";
       return;
     }
 
@@ -52,8 +70,34 @@ export default function FileAttachmentField({
       setUploadError(error?.message || "File upload failed.");
     } finally {
       setUploading(false);
-      event.target.value = "";
     }
+  };
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (isPdfFile(file)) {
+      setUploadError("");
+      setPdfSelectionFile(file);
+      return;
+    }
+
+    await uploadFile(file);
+  };
+
+  const handlePdfConfirm = async (file, metadata) => {
+    setPdfSelectionFile(null);
+    await uploadFile(file, metadata);
+  };
+
+  const clearFile = () => {
+    if (hasPendingFile) {
+      onPendingClear?.();
+      return;
+    }
+    onChange("");
   };
 
   return (
@@ -78,7 +122,7 @@ export default function FileAttachmentField({
                   {fileName || emptyLabel}
                 </p>
                 <p className="text-xs leading-5 text-slate-500">
-                  {helperTextForUpload(uploading, fileName, helperText)}
+                  {helperTextForUpload(uploading, fileName, helperText, hasPendingFile)}
                 </p>
               </div>
             </div>
@@ -86,10 +130,10 @@ export default function FileAttachmentField({
               {!readOnly ? (
                 <Button type="button" variant="outline" size="sm" onClick={triggerPicker} disabled={uploading || (fileName && !allowReplace)}>
                   {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                  {fileName ? (allowReplace ? "Replace" : "Uploaded") : "Upload"}
+                  {fileName ? (allowReplace ? "Replace" : "Selected") : "Upload"}
                 </Button>
               ) : null}
-              {storedPath ? (
+              {storedPath && !hasPendingFile ? (
                 <>
                   <Button type="button" variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
                     <Eye className="h-4 w-4" />
@@ -101,12 +145,18 @@ export default function FileAttachmentField({
                     </a>
                   </Button>
                   {!readOnly && allowClear ? (
-                    <Button type="button" variant="outline" size="sm" onClick={() => onChange("")}>
+                    <Button type="button" variant="outline" size="sm" onClick={clearFile}>
                       <Trash2 className="h-4 w-4" />
                       Clear
                     </Button>
                   ) : null}
                 </>
+              ) : null}
+              {hasPendingFile && !readOnly && allowClear ? (
+                <Button type="button" variant="outline" size="sm" onClick={clearFile}>
+                  <Trash2 className="h-4 w-4" />
+                  Clear
+                </Button>
               ) : null}
             </div>
           </div>
@@ -118,6 +168,17 @@ export default function FileAttachmentField({
           storedPath={storedPath}
           onClose={() => setPreviewOpen(false)}
         />
+      ) : null}
+      {pdfSelectionFile ? (
+        <Suspense fallback={null}>
+          <PdfPageSelectionDialog
+            file={pdfSelectionFile}
+            open={Boolean(pdfSelectionFile)}
+            onCancel={() => setPdfSelectionFile(null)}
+            onConfirm={handlePdfConfirm}
+            confirmLabel={deferUpload ? "Use selected pages" : "Upload selected pages"}
+          />
+        </Suspense>
       ) : null}
     </>
   );

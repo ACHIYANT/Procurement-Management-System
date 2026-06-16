@@ -2,6 +2,7 @@
 
 const { Op } = require("sequelize");
 const { ProcurementCaseRepository } = require("../repository/procurement-case-repository");
+const ApprovalService = require("./approval-service");
 const {
   asAmountNumber,
   asId,
@@ -42,6 +43,51 @@ const PROCUREMENT_CASE_SORT_FIELDS = [
 class ProcurementCaseService {
   constructor() {
     this.repository = new ProcurementCaseRepository();
+    this.approvalService = new ApprovalService();
+  }
+
+  async assertApprovedProcurementCaseChangeRequest(caseId, payload = {}) {
+    const approvalRequestId = payload.approval_request_id
+      ? asId(payload.approval_request_id, "Approval request")
+      : null;
+
+    if (!approvalRequestId) {
+      const error = new Error("Approved update request is required to edit a saved procurement case.");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const request = await this.approvalService.findApprovedChangeRequest({
+      id: approvalRequestId,
+      moduleKey: "procurementCases",
+      entityType: "procurement_case",
+      entityId: caseId,
+    });
+
+    if (!request) {
+      const error = new Error("No approved update request is available for this procurement case.");
+      error.statusCode = 403;
+      throw error;
+    }
+
+    return request;
+  }
+
+  normalizeUpdatePayload(payload = {}) {
+    const title = requireValue(payload, "title", "Case title");
+    const procurementMode = requireValue(payload, "procurement_mode", "Procurement mode");
+
+    if (!PROCUREMENT_MODES.has(procurementMode)) {
+      const error = new Error("Procurement mode is invalid.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return {
+      title,
+      procurement_mode: procurementMode,
+      remarks: normalizeNullableText(payload.remarks),
+    };
   }
 
   decorateCase(procurementCase) {
@@ -259,6 +305,47 @@ class ProcurementCaseService {
 
       return createdCase;
     });
+
+    return this.getById(procurementCase.id);
+  }
+
+  async update(id, payload = {}) {
+    const caseId = asId(id, "Procurement case id");
+    const procurementCase = await this.repository.findProcurementCaseByPk(caseId);
+    if (!procurementCase) throw notFound("Procurement case not found.");
+
+    const approvedChangeRequest = await this.assertApprovedProcurementCaseChangeRequest(
+      procurementCase.id,
+      payload,
+    );
+    const updatePayload = this.normalizeUpdatePayload(payload);
+
+    const actorEmpcode = normalizeText(payload.actor_empcode);
+    const actor = actorEmpcode
+      ? await this.repository.findProcurementEmployeeByEmpcode(actorEmpcode)
+      : payload.actor_employee_id
+        ? await this.repository.findProcurementEmployeeByPk(asId(payload.actor_employee_id, "Actor employee"))
+        : null;
+
+    await this.repository.withTransaction(async (transaction) => {
+      await this.repository.updateProcurementCase(
+        procurementCase,
+        {
+          ...updatePayload,
+          updated_by: actor?.id || null,
+        },
+        { transaction },
+      );
+    });
+
+    await this.approvalService.markApplied(
+      approvedChangeRequest.id,
+      { applied_payload: updatePayload },
+      {
+        employee_id: actor?.id || null,
+        name: normalizeNullableText(payload.actor_name) || actor?.employee_name || actorEmpcode || null,
+      },
+    );
 
     return this.getById(procurementCase.id);
   }

@@ -95,6 +95,7 @@ const FILE_SCOPE_MAP = {
   sale_bills: "sale-bills",
   seller_invoice_copies: "seller-invoice-copies",
   seller_invoices: "seller-invoices",
+  work_task_attachment: "work-task-attachments",
   tender_document: "tender-documents",
   vendor_payment_noting: "vendor-payment-notings",
 };

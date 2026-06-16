@@ -5,6 +5,7 @@ const INDENT_DOCUMENT_TABLE = "indent_documents";
 const INDENT_ITEM_EVENT_TABLE = "indent_item_events";
 const ITEM_CATEGORY_TABLE = "item_categories";
 const ITEM_SUBCATEGORY_TABLE = "item_subcategories";
+const ITEM_SPECIFICATION_TEMPLATE_TABLE = "item_specification_templates";
 const PROCUREMENT_CASE_TABLE = "procurement_cases";
 const PROCUREMENT_CASE_ITEM_TABLE = "procurement_case_items";
 const FIRM_TABLE = "firms";
@@ -52,6 +53,11 @@ const APPROVAL_WORKFLOW_LEVEL_TABLE = "approval_workflow_levels";
 const APPROVAL_REQUEST_TABLE = "approval_requests";
 const APPROVAL_REQUEST_STEP_TABLE = "approval_request_steps";
 const APPROVAL_REQUEST_PAYLOAD_TABLE = "approval_request_payloads";
+const WORK_TASK_TABLE = "work_tasks";
+const WORK_TASK_ASSIGNEE_TABLE = "work_task_assignees";
+const WORK_TASK_COMMENT_TABLE = "work_task_comments";
+const WORK_TASK_ACTIVITY_TABLE = "work_task_activities";
+const WORK_TASK_ATTACHMENT_TABLE = "work_task_attachments";
 
 module.exports = {
   PROCUREMENT_EMPLOYEE_TABLE,
@@ -61,6 +67,7 @@ module.exports = {
   INDENT_ITEM_EVENT_TABLE,
   ITEM_CATEGORY_TABLE,
   ITEM_SUBCATEGORY_TABLE,
+  ITEM_SPECIFICATION_TEMPLATE_TABLE,
   PROCUREMENT_CASE_TABLE,
   PROCUREMENT_CASE_ITEM_TABLE,
   FIRM_TABLE,
@@ -107,4 +114,9 @@ module.exports = {
   APPROVAL_REQUEST_TABLE,
   APPROVAL_REQUEST_STEP_TABLE,
   APPROVAL_REQUEST_PAYLOAD_TABLE,
+  WORK_TASK_TABLE,
+  WORK_TASK_ASSIGNEE_TABLE,
+  WORK_TASK_COMMENT_TABLE,
+  WORK_TASK_ACTIVITY_TABLE,
+  WORK_TASK_ATTACHMENT_TABLE,
 };

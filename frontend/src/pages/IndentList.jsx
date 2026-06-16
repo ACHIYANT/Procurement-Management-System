@@ -5,8 +5,12 @@ import ListPage from "@/components/ListPage";
 import ListTable from "@/components/ListTable";
 import PopupMessage from "@/components/PopupMessage";
 import { procurementRequest } from "@/lib/procurement-api";
-import { requestSavedRecordChange } from "@/lib/approval-request-helper";
-import { canAccessFeature, getCurrentUserProfile, getCurrentUserRoles, PMS_ROLES } from "@/lib/roles";
+import {
+  findApprovedSavedRecordChange,
+  getSavedRecordUpdatePath,
+  requestSavedRecordChange,
+} from "@/lib/approval-request-helper";
+import { getCurrentUserProfile, getCurrentUserRoles, PMS_ROLES } from "@/lib/roles";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
 import useDebounce from "@/hooks/useDebounce";
 
@@ -41,6 +45,7 @@ export default function IndentList() {
   const isProcurementOfficer = roles.includes(PMS_ROLES.PROCUREMENT_OFFICER);
   const isIndentInitiator = roles.includes(PMS_ROLES.INDENT_INITIATOR);
   const isAdminSide = roles.includes(PMS_ROLES.ADMIN) || roles.includes(PMS_ROLES.SUPER_ADMIN);
+  const canManageIndentEntry = isIndentInitiator || isAdminSide;
   const showQueueOnly = isProcurementOfficer && !isAdminSide;
 
   const groupedWorkQueue = useMemo(() => {
@@ -166,6 +171,15 @@ export default function IndentList() {
   ];
 
   const requestUpdateApproval = async (id, row) => {
+    if (!canManageIndentEntry) {
+      setPopup({
+        open: true,
+        type: "error",
+        message: "Only Indent Initiator, Admin, or Super Admin can request indent update approval.",
+      });
+      return;
+    }
+
     try {
       const result = await requestSavedRecordChange({
         moduleKey: "indents",
@@ -180,6 +194,44 @@ export default function IndentList() {
     } catch (approvalError) {
       setPopup({ open: true, type: "error", message: approvalError.message || "Unable to request approval." });
     }
+  };
+
+  const openIndentForUpdate = async (id) => {
+    const row = rows.find((item) => String(item?.id) === String(id));
+    const isDraft = String(row?.status || "").toLowerCase() === "draft";
+    if (isDraft && canManageIndentEntry) {
+      navigate(`/indents/${id}/edit`);
+      return;
+    }
+
+    try {
+      const approvedRequest = await findApprovedSavedRecordChange({
+        moduleKey: "indents",
+        entityType: "indent",
+        entityId: id,
+      });
+
+      if (approvedRequest?.id) {
+        navigate(
+          getSavedRecordUpdatePath({
+            moduleKey: "indents",
+            entityType: "indent",
+            entityId: id,
+            approvalRequestId: approvedRequest.id,
+          }),
+        );
+        return;
+      }
+    } catch (error) {
+      setPopup({
+        open: true,
+        type: "error",
+        message: error.message || "Unable to check update approval.",
+      });
+      return;
+    }
+
+    navigate(`/indents/${id}`);
   };
 
   const queueOnlyContent = isProcurementOfficer && workQueue ? (
@@ -308,15 +360,15 @@ export default function IndentList() {
         loading={loading}
         onAdd={() => navigate("/indents/new")}
         addLabel="Add Indent"
-        onUpdate={(id) => navigate(`/indents/${id}`)}
+        onUpdate={openIndentForUpdate}
         onSearch={setSearch}
         searchValue={search}
         selectedRows={selectedRows}
         setSelectedRows={setSelectedRows}
         showUpdate
-        showRequestUpdateApproval
+        showRequestUpdateApproval={canManageIndentEntry}
         onRequestUpdateApproval={requestUpdateApproval}
-        showAdd={canAccessFeature(roles, "indents", "create") || isIndentInitiator}
+        showAdd={canManageIndentEntry}
         updateTooltip="Select one indent to open details."
         searchPlaceholder="Search indent no., CFMS no., department..."
         aboveContent={

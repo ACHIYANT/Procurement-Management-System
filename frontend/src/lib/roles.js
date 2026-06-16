@@ -21,6 +21,39 @@ export const PMS_ROLES = {
 };
 
 export const PMS_MODULE_ACCESS = {
+  workTasks: {
+    view: [
+      PMS_ROLES.USER,
+      PMS_ROLES.VIEWER,
+      PMS_ROLES.ASSOCIATE,
+      PMS_ROLES.INDENT_INITIATOR,
+      PMS_ROLES.PROCUREMENT_OFFICER,
+      PMS_ROLES.FINANCE_OFFICER,
+      PMS_ROLES.APPROVER,
+      PMS_ROLES.ADMIN,
+      PMS_ROLES.SUPER_ADMIN,
+    ],
+    create: [
+      PMS_ROLES.USER,
+      PMS_ROLES.ASSOCIATE,
+      PMS_ROLES.INDENT_INITIATOR,
+      PMS_ROLES.PROCUREMENT_OFFICER,
+      PMS_ROLES.FINANCE_OFFICER,
+      PMS_ROLES.APPROVER,
+      PMS_ROLES.ADMIN,
+      PMS_ROLES.SUPER_ADMIN,
+    ],
+    manage: [
+      PMS_ROLES.USER,
+      PMS_ROLES.ASSOCIATE,
+      PMS_ROLES.INDENT_INITIATOR,
+      PMS_ROLES.PROCUREMENT_OFFICER,
+      PMS_ROLES.FINANCE_OFFICER,
+      PMS_ROLES.APPROVER,
+      PMS_ROLES.ADMIN,
+      PMS_ROLES.SUPER_ADMIN,
+    ],
+  },
   dashboard: {
     view: [
       PMS_ROLES.USER,
@@ -82,6 +115,11 @@ export const PMS_MODULE_ACCESS = {
     view: [PMS_ROLES.ASSOCIATE, PMS_ROLES.PROCUREMENT_OFFICER, PMS_ROLES.APPROVER],
     create: [PMS_ROLES.ASSOCIATE, PMS_ROLES.PROCUREMENT_OFFICER],
   },
+  specificationTemplates: {
+    view: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
+    create: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
+    manage: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
+  },
   committees: {
     view: [PMS_ROLES.PROCUREMENT_OFFICER, PMS_ROLES.APPROVER],
     create: [PMS_ROLES.PROCUREMENT_OFFICER],
@@ -97,6 +135,28 @@ export const PMS_MODULE_ACCESS = {
     view: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
     manage: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
   },
+};
+
+const INDENT_INITIATOR_WORKSPACE_MODULES = new Set([
+  "dashboard",
+  "workTasks",
+  "indents",
+]);
+
+export const isIndentInitiatorScopedUser = (currentRoles = []) => {
+  const roleSet = new Set(currentRoles.map(normalizeRole).filter(Boolean));
+  if (!roleSet.has(PMS_ROLES.INDENT_INITIATOR)) return false;
+
+  const elevatedRoles = [
+    PMS_ROLES.ADMIN,
+    PMS_ROLES.SUPER_ADMIN,
+    PMS_ROLES.ASSOCIATE,
+    PMS_ROLES.PROCUREMENT_OFFICER,
+    PMS_ROLES.FINANCE_OFFICER,
+    PMS_ROLES.APPROVER,
+  ];
+
+  return !elevatedRoles.some((role) => roleSet.has(role));
 };
 
 export const formatRoleLabel = (role) =>
@@ -166,6 +226,13 @@ export const canAccessFeature = (
   action = "view",
   options = {},
 ) => {
+  if (
+    isIndentInitiatorScopedUser(currentRoles) &&
+    !INDENT_INITIATOR_WORKSPACE_MODULES.has(moduleKey)
+  ) {
+    return false;
+  }
+
   const moduleConfig = PMS_MODULE_ACCESS[moduleKey] || {};
   const allowedRoles = moduleConfig[action] || [];
   return canAccessModule(currentRoles, allowedRoles, options);

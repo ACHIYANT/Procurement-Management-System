@@ -1,4 +1,4 @@
-import { postProcurement } from "@/lib/procurement-api";
+import { postProcurement, procurementRequest } from "@/lib/procurement-api";
 import { getCurrentUserProfile, getCurrentUserRoles } from "@/lib/roles";
 
 export async function requestSavedRecordChange({
@@ -39,4 +39,46 @@ export async function requestSavedRecordChange({
       "",
     actor_roles: getCurrentUserRoles(),
   });
+}
+
+export async function findApprovedSavedRecordChange({
+  moduleKey,
+  entityType,
+  entityId,
+}) {
+  const params = new URLSearchParams({
+    module_key: moduleKey,
+    action_key: "change_saved_record",
+    entity_type: entityType,
+    entity_id: String(entityId),
+    status: "approved",
+  });
+  const rows = await procurementRequest(`/approvals/requests?${params.toString()}`);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+export function getSavedRecordUpdatePath({
+  moduleKey,
+  entityType,
+  entityId,
+  approvalRequestId,
+}) {
+  const id = encodeURIComponent(String(entityId || ""));
+  const requestQuery = approvalRequestId
+    ? `?approvalRequestId=${encodeURIComponent(String(approvalRequestId))}`
+    : "";
+  const key = `${moduleKey}:${entityType}`;
+
+  const routes = {
+    "indents:indent": `/indents/${id}/edit${requestQuery}`,
+    "procurementCases:procurement_case": `/procurement-cases/${id}/edit${requestQuery}`,
+    "tenders:tender": `/tenders/${id}${requestQuery}`,
+    "purchaseOrders:purchase_order": `/purchase-orders/${id}${requestQuery}`,
+    "emd:emd_entry": `/emd/${id}/edit${requestQuery}`,
+    "pbg:pbg_entry": `/pbg/${id}/edit${requestQuery}`,
+    "committees:committee_meeting": `/committees/${id}${requestQuery}`,
+    "departmentFunds:department_fund": `/department-funds${requestQuery}`,
+  };
+
+  return routes[key] || "";
 }

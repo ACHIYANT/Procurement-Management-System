@@ -75,6 +75,10 @@ class ProcurementCaseRepository {
     return ProcurementEmployee.findByPk(id);
   }
 
+  async findProcurementEmployeeByEmpcode(empcode) {
+    return ProcurementEmployee.findOne({ where: { empcode } });
+  }
+
   async findIndentItemsByIds(itemIds = []) {
     return IndentItem.findAll({
       where: { id: itemIds },
@@ -146,6 +150,10 @@ class ProcurementCaseRepository {
 
   async createProcurementCase(payload, { transaction } = {}) {
     return ProcurementCase.create(payload, { transaction });
+  }
+
+  async updateProcurementCase(procurementCase, payload, { transaction } = {}) {
+    return procurementCase.update(payload, { transaction });
   }
 
   async findProcurementCaseByPk(id, options = {}) {

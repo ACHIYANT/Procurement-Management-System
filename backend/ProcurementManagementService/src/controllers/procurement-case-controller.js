@@ -52,8 +52,23 @@ const create = async (req, res) => {
   }
 };
 
+const update = async (req, res) => {
+  try {
+    const data = await service.update(req.params.id, req.body || {});
+    return res.status(200).json({
+      success: true,
+      message: "Procurement case updated successfully.",
+      data,
+      err: {},
+    });
+  } catch (error) {
+    return sendError(res, error, "Unable to update procurement case.");
+  }
+};
+
 module.exports = {
   list,
   getById,
   create,
+  update,
 };

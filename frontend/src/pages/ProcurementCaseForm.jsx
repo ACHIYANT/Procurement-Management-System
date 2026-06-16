@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import FieldError from "@/components/FieldError";
 import PopupMessage from "@/components/PopupMessage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { postProcurement, procurementRequest } from "@/lib/procurement-api";
+import { patchProcurement, postProcurement, procurementRequest } from "@/lib/procurement-api";
 import { buildRequiredErrors, hasErrors, invalidControlClass } from "@/lib/form-validation";
 import { getCurrentUserProfile } from "@/lib/roles";
 
@@ -48,8 +48,11 @@ function Field({ label, children, error }) {
 
 export default function ProcurementCaseForm() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [searchParams] = useSearchParams();
   const preselectedIndentId = searchParams.get("indentId") || "";
+  const approvalRequestId = searchParams.get("approvalRequestId") || "";
+  const isEditMode = Boolean(id);
   const [currentUser] = useState(() => getCurrentUserProfile());
   const [form, setForm] = useState(() => ({ ...initialForm, indent_id: preselectedIndentId }));
   const [errors, setErrors] = useState({});
@@ -98,6 +101,7 @@ export default function ProcurementCaseForm() {
       setLoadingIndent(true);
       const data = await procurementRequest(`/indents/${indentId}`);
       setIndentDetail(data);
+      if (isEditMode) return;
       const pendingItems = (Array.isArray(data?.items) ? data.items : [])
         .filter((item) => String(item.procurement_decision_status || "").toLowerCase() !== "case_created")
         .filter((item) => ["assigned", "reassigned"].includes(String(item.assignment_status || "").toLowerCase()))
@@ -115,7 +119,40 @@ export default function ProcurementCaseForm() {
     } finally {
       setLoadingIndent(false);
     }
-  }, [currentOfficer]);
+  }, [currentOfficer, isEditMode]);
+
+  useEffect(() => {
+    if (!isEditMode || !id) return undefined;
+
+    const loadProcurementCase = async () => {
+      try {
+        const data = await procurementRequest(`/procurement-cases/${id}`);
+        setForm({
+          indent_id: data?.indent_id ? String(data.indent_id) : "",
+          title: data?.title || "",
+          procurement_officer_id: data?.procurement_officer_id ? String(data.procurement_officer_id) : "",
+          procurement_mode: data?.procurement_mode || "tender_gem",
+          estimated_value: data?.estimated_value ?? "",
+          location_scope: data?.location_scope || "PANCHKULA",
+          remarks: data?.remarks || "",
+        });
+        setSelectedItemIds(
+          (Array.isArray(data?.case_items) ? data.case_items : [])
+            .map((caseItem) => caseItem?.indent_item_id)
+            .filter(Boolean),
+        );
+      } catch (error) {
+        setPopup({
+          open: true,
+          type: "error",
+          message: error.message || "Unable to load procurement case.",
+        });
+      }
+    };
+
+    const timer = setTimeout(() => loadProcurementCase(), 0);
+    return () => clearTimeout(timer);
+  }, [id, isEditMode]);
 
   useEffect(() => {
     const timer = setTimeout(() => loadIndentDetail(form.indent_id), 0);
@@ -128,6 +165,7 @@ export default function ProcurementCaseForm() {
   };
 
   const toggleItem = (itemId) => {
+    if (isEditMode) return;
     setSelectedItemIds((current) =>
       current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId],
     );
@@ -160,6 +198,7 @@ export default function ProcurementCaseForm() {
   }, [selectableItems, selectedItemIds]);
 
   useEffect(() => {
+    if (isEditMode) return;
     setForm((current) => {
       if (current.estimated_value === computedEstimatedValue) return current;
       return {
@@ -167,7 +206,7 @@ export default function ProcurementCaseForm() {
         estimated_value: computedEstimatedValue,
       };
     });
-  }, [computedEstimatedValue]);
+  }, [computedEstimatedValue, isEditMode]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -176,18 +215,38 @@ export default function ProcurementCaseForm() {
       { name: "title", label: "Case title" },
       { name: "procurement_mode", label: "Procurement mode" },
     ]);
-    if (!selectedItemIds.length) {
+    if (!isEditMode && !selectedItemIds.length) {
       validationErrors.item_ids = "Select at least one indent item.";
     }
-    if (unestimatedAssignedItems.length) {
+    if (!isEditMode && unestimatedAssignedItems.length) {
       validationErrors.item_ids =
         "Procurement case can be created only after estimated value is recorded for all items currently assigned to you under this indent.";
+    }
+    if (isEditMode && !approvalRequestId) {
+      validationErrors.approval_request_id = "Approved update request is required.";
     }
     setErrors(validationErrors);
     if (hasErrors(validationErrors)) return;
 
     setSaving(true);
     try {
+      if (isEditMode) {
+        const data = await patchProcurement(`/procurement-cases/${id}`, {
+          title: form.title,
+          procurement_mode: form.procurement_mode,
+          remarks: form.remarks,
+          approval_request_id: approvalRequestId,
+          actor_empcode: currentUser?.empcode || "",
+          actor_name:
+            currentUser?.employee_name ||
+            currentUser?.fullname ||
+            currentUser?.fullName ||
+            "",
+        });
+        navigate(`/procurement-cases/${data.id}`, { replace: true });
+        return;
+      }
+
       const data = await postProcurement("/procurement-cases", {
         ...form,
         location_scope: "PANCHKULA",
@@ -215,9 +274,13 @@ export default function ProcurementCaseForm() {
             </div>
             <div className="px-6 py-6 md:px-8 md:py-7">
             <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-white/58">Procurement Case</p>
-            <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.04em] text-white md:text-[2.45rem]">Add Procurement Case</h1>
+            <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.04em] text-white md:text-[2.45rem]">
+              {isEditMode ? "Apply Approved Case Update" : "Add Procurement Case"}
+            </h1>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-white/70 md:text-[15px]">
-              Group your assigned indent items into one procurement strategy package. Use one case for items moving together in the same route or tender cycle.
+              {isEditMode
+                ? "Update the approved saved-record fields for this procurement case. Item mapping remains locked for audit safety."
+                : "Group your assigned indent items into one procurement strategy package. Use one case for items moving together in the same route or tender cycle."}
             </p>
             </div>
           </div>
@@ -231,6 +294,7 @@ export default function ProcurementCaseForm() {
                       className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(errors.indent_id)}`}
                       value={form.indent_id}
                       onChange={update("indent_id")}
+                      disabled={isEditMode}
                     >
                       <option value="">Select indent</option>
                       {indents.map((indent) => (
@@ -270,6 +334,17 @@ export default function ProcurementCaseForm() {
                   />
                 </Field>
 
+                {isEditMode ? (
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                    <p className="font-semibold">Approved update mode</p>
+                    <p className="mt-1">
+                      You can correct case title, procurement mode, and remarks. Linked indent items are view-only here to keep the downstream tender audit trail clean.
+                    </p>
+                    <FieldError message={errors.approval_request_id} />
+                  </div>
+                ) : null}
+
+                {!isEditMode ? (
                 <div className="space-y-3">
                   <div>
                     <h2 className="text-lg font-semibold text-slate-950">Select Indent Items</h2>
@@ -338,14 +413,15 @@ export default function ProcurementCaseForm() {
                     </div>
                   )}
                 </div>
+                ) : null}
 
                 <div className="flex justify-end">
                   <Button
                     type="submit"
                     className="bg-blue-700 text-white hover:bg-blue-800"
-                    disabled={saving || Boolean(unestimatedAssignedItems.length)}
+                    disabled={saving || (!isEditMode && Boolean(unestimatedAssignedItems.length))}
                   >
-                    {saving ? "Saving..." : "Save Procurement Case"}
+                    {saving ? "Saving..." : isEditMode ? "Apply Approved Update" : "Save Procurement Case"}
                   </Button>
                 </div>
               </form>

@@ -4,7 +4,11 @@ import { useNavigate } from "react-router-dom";
 import ListPage from "@/components/ListPage";
 import ListTable from "@/components/ListTable";
 import PopupMessage from "@/components/PopupMessage";
-import { requestSavedRecordChange } from "@/lib/approval-request-helper";
+import {
+  findApprovedSavedRecordChange,
+  getSavedRecordUpdatePath,
+  requestSavedRecordChange,
+} from "@/lib/approval-request-helper";
 import { procurementRequest } from "@/lib/procurement-api";
 import { canAccessFeature, getCurrentUserRoles } from "@/lib/roles";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
@@ -99,6 +103,34 @@ export default function ProcurementCaseList() {
     }
   };
 
+  const openProcurementCaseForUpdate = async (id) => {
+    try {
+      const approvedRequest = await findApprovedSavedRecordChange({
+        moduleKey: "procurementCases",
+        entityType: "procurement_case",
+        entityId: id,
+      });
+      if (approvedRequest?.id) {
+        navigate(
+          getSavedRecordUpdatePath({
+            moduleKey: "procurementCases",
+            entityType: "procurement_case",
+            entityId: id,
+            approvalRequestId: approvedRequest.id,
+          }),
+        );
+        return;
+      }
+      navigate(`/procurement-cases/${id}`);
+    } catch (approvalError) {
+      setPopup({
+        open: true,
+        type: "error",
+        message: approvalError.message || "Unable to check approved update request.",
+      });
+    }
+  };
+
   return (
     <>
       <ListPage
@@ -109,7 +141,7 @@ export default function ProcurementCaseList() {
         loading={loading}
         onAdd={() => navigate("/procurement-cases/new")}
         addLabel="Add Procurement Case"
-        onUpdate={(id) => navigate(`/procurement-cases/${id}`)}
+        onUpdate={openProcurementCaseForUpdate}
         onSearch={setSearch}
         searchValue={search}
         selectedRows={selectedRows}

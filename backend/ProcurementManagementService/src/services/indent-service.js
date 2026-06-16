@@ -2,6 +2,7 @@
 
 const { Op } = require("sequelize");
 const { IndentRepository } = require("../repository/indent-repository");
+const ApprovalService = require("./approval-service");
 const {
   asAmountNumber,
   asId,
@@ -11,6 +12,7 @@ const {
   normalizeCursor,
   normalizeDate,
   normalizeLimit,
+  normalizeNullableDate,
   normalizeSortBy,
   normalizeSortDirection,
   normalizeNullableText,
@@ -35,6 +37,7 @@ const INDENT_SORT_FIELDS = [
 class IndentService {
   constructor() {
     this.repository = new IndentRepository();
+    this.approvalService = new ApprovalService();
   }
 
   normalizeYesNoBoolean(value) {
@@ -58,6 +61,41 @@ class IndentService {
           .filter(Boolean),
       ),
     );
+  }
+
+  isDraftPayload(payload = {}) {
+    const status = String(payload.status || "").trim().toLowerCase();
+    return payload.save_as_draft === true || status === "draft";
+  }
+
+  getCurrentStatus(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  buildIndentPayload(payload = {}, { draft = false } = {}) {
+    return {
+      indent_no: draft
+        ? normalizeNullableText(payload.indent_no)
+        : requireValue(payload, "indent_no", "Indent number"),
+      indent_date: draft
+        ? normalizeNullableDate(payload.indent_date)
+        : requireDate(payload, "indent_date", "Indent date"),
+      department_name: draft
+        ? normalizeNullableText(payload.department_name)
+        : requireValue(payload, "department_name", "Indenting organization"),
+      cfms_no: normalizeNullableText(payload.cfms_no),
+      received_date: draft
+        ? normalizeNullableDate(payload.received_date)
+        : requireDate(payload, "received_date", "Received date"),
+      location_scope: draft
+        ? normalizeText(payload.location_scope) || "PANCHKULA"
+        : requireValue(payload, "location_scope", "Location scope"),
+      indent_document_path: normalizeNullableText(payload.indent_document_path),
+      specification_document_path: normalizeNullableText(payload.specification_document_path),
+      administrative_approval_document_path: normalizeNullableText(payload.administrative_approval_document_path),
+      administrative_approval_remarks: normalizeNullableText(payload.administrative_approval_remarks),
+      remarks: normalizeNullableText(payload.remarks),
+    };
   }
 
   ensureRole(employee, requiredRole) {
@@ -124,20 +162,7 @@ class IndentService {
     };
   }
 
-  buildOrganizationCode(value) {
-    const words = String(value || "ORG")
-      .toUpperCase()
-      .replace(/[^A-Z0-9 ]/g, " ")
-      .split(/\s+/)
-      .filter(Boolean);
-    const code = words
-      .slice(0, 3)
-      .map((word) => word[0])
-      .join("");
-    return code || "ORG";
-  }
-
-  async generateSystemIndentNo({ receivedDate, departmentName, locationScope }, transaction) {
+  async generateSystemIndentNo({ receivedDate }, transaction) {
     const financialYear = this.resolveFinancialYear(receivedDate);
     const sequence =
       (await this.repository.countIndentsInFinancialYear(
@@ -145,12 +170,7 @@ class IndentService {
         financialYear.endDate,
         { transaction },
       )) + 1;
-    const locationCode = String(locationScope || "PMS")
-      .replace(/[^A-Z0-9]/gi, "")
-      .slice(0, 4)
-      .toUpperCase() || "PMS";
-    const organizationCode = this.buildOrganizationCode(departmentName);
-    return `PMS/${locationCode}/${organizationCode}/${financialYear.label}/${String(sequence).padStart(4, "0")}`;
+    return `PMS/${financialYear.label}/${String(sequence).padStart(4, "0")}`;
   }
 
   async logItemEvent(
@@ -183,10 +203,11 @@ class IndentService {
   normalizeIndentItems(items = []) {
     return (Array.isArray(items) ? items : [])
       .map((item) => ({
+        id: item?.id ? asId(item.id, "Indent item") : null,
         category_id: item?.category_id ? asId(item.category_id, "Category") : null,
         subcategory_id: item?.subcategory_id ? asId(item.subcategory_id, "Subcategory") : null,
         item_name: normalizeText(item?.item_name),
-        quantity: normalizeAmount(item?.quantity),
+        quantity: normalizeAmount(item?.quantity) || null,
         unit: normalizeText(item?.unit),
         specification: normalizeNullableText(item?.specification),
         specific_make_required: this.normalizeYesNoBoolean(item?.specific_make_required),
@@ -195,7 +216,153 @@ class IndentService {
         administrative_approval_document_path: normalizeNullableText(item?.administrative_approval_document_path),
         remarks: normalizeNullableText(item?.remarks),
       }))
-      .filter((item) => item.item_name || item.unit);
+      .filter(
+        (item) =>
+          item.category_id ||
+          item.subcategory_id ||
+          item.item_name ||
+          item.quantity !== null ||
+          item.unit ||
+          item.preferred_make ||
+          item.remarks,
+      );
+  }
+
+  async validateFinalIndent({ indentPayload, items }) {
+    if (!indentPayload.indent_document_path) {
+      const error = new Error("Indent upload is required.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (!items.length) {
+      const error = new Error("At least one indent item is required.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    for (const item of items) {
+      if (!item.item_name) {
+        const error = new Error("Each indent item must have an item name.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (!item.quantity) {
+        const error = new Error("Each indent item must have quantity.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (!item.unit) {
+        const error = new Error("Each indent item must have unit.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (!item.category_id) {
+        const error = new Error("Each indent item must have category.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (!item.subcategory_id) {
+        const error = new Error("Each indent item must have sub category.");
+        error.statusCode = 400;
+        throw error;
+      }
+      const [category, subcategory] = await Promise.all([
+        this.repository.findItemCategoryByPk(item.category_id),
+        this.repository.findItemSubcategoryByPk(item.subcategory_id),
+      ]);
+      if (!category || !category.is_active) {
+        const error = new Error("Selected item category is invalid or inactive.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (
+        !subcategory ||
+        !subcategory.is_active ||
+        Number(subcategory.category_id) !== Number(item.category_id)
+      ) {
+        const error = new Error("Selected item sub category is invalid for the chosen category.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (item.specific_make_required && !item.preferred_make) {
+        const error = new Error("Specific make / company name is required when specific make is marked yes.");
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+  }
+
+  buildItemCreatePayload(item, indentId, creatorId = null) {
+    return {
+      indent_id: indentId,
+      category_id: item.category_id,
+      subcategory_id: item.subcategory_id,
+      item_name: item.item_name || null,
+      quantity: item.quantity,
+      unit: item.unit || null,
+      specification: item.specification,
+      specific_make_required: item.specific_make_required,
+      estimated_rate: null,
+      estimated_amount: null,
+      preferred_make: item.preferred_make,
+      administrative_approval_required: item.administrative_approval_required,
+      administrative_approval_document_path: null,
+      assigned_procurement_officer_id: null,
+      assigned_at: null,
+      assignment_status: "unassigned",
+      procurement_decision_status: "pending",
+      return_reason: null,
+      returned_at: null,
+      estimated_by_procurement_officer_id: null,
+      estimated_at: null,
+      remarks: item.remarks,
+      created_by: creatorId,
+      updated_by: creatorId,
+    };
+  }
+
+  buildItemUpdatePayload(item, updaterId = null) {
+    return {
+      category_id: item.category_id,
+      subcategory_id: item.subcategory_id,
+      item_name: item.item_name || null,
+      quantity: item.quantity,
+      unit: item.unit || null,
+      specification: item.specification,
+      specific_make_required: item.specific_make_required,
+      preferred_make: item.preferred_make,
+      administrative_approval_required: item.administrative_approval_required,
+      remarks: item.remarks,
+      updated_by: updaterId,
+    };
+  }
+
+  async assertApprovedIndentChangeRequest(indentId, payload = {}) {
+    const approvalRequestId = payload.approval_request_id
+      ? asId(payload.approval_request_id, "Approval request")
+      : null;
+
+    if (!approvalRequestId) {
+      const error = new Error("Approved update request is required to edit a submitted indent.");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const request = await this.approvalService.findApprovedChangeRequest({
+      id: approvalRequestId,
+      moduleKey: "indents",
+      entityType: "indent",
+      entityId: indentId,
+    });
+
+    if (!request) {
+      const error = new Error("No approved update request is available for this indent.");
+      error.statusCode = 403;
+      throw error;
+    }
+
+    return request;
   }
 
   decorateIndent(indent) {
@@ -213,7 +380,8 @@ class IndentService {
     const caseCreatedCount = items.filter((item) => String(item?.procurement_decision_status || "").toLowerCase() === "case_created").length;
     const totalEstimatedAmount = items.reduce((sum, item) => sum + asAmountNumber(item?.estimated_amount), 0);
 
-    target.status = this.deriveIndentStatus(items);
+    const storedStatus = this.getCurrentStatus(target.status || indent.status);
+    target.status = storedStatus === "draft" ? "draft" : this.deriveIndentStatus(items);
     target.item_count = items.length;
     target.assigned_item_count = assignedCount;
     target.unassigned_item_count = Math.max(items.length - assignedCount, 0);
@@ -351,155 +519,177 @@ class IndentService {
   }
 
   async create(payload = {}) {
-    const indentNo = requireValue(payload, "indent_no", "Indent number");
-    const indentDate = requireDate(payload, "indent_date", "Indent date");
-    const departmentName = requireValue(payload, "department_name", "Indenting organization");
-    const cfmsNo = normalizeNullableText(payload.cfms_no);
-    const receivedDate = requireDate(payload, "received_date", "Received date");
-    const locationScope = requireValue(payload, "location_scope", "Location scope");
+    const draft = this.isDraftPayload(payload);
+    const indentPayload = this.buildIndentPayload(payload, { draft });
     const items = this.normalizeIndentItems(payload.items);
-    const indentDocumentPath = normalizeNullableText(payload.indent_document_path);
-    const specificationDocumentPath = normalizeNullableText(payload.specification_document_path);
-    const administrativeApprovalDocumentPath = normalizeNullableText(payload.administrative_approval_document_path);
-    const administrativeApprovalRemarks = normalizeNullableText(payload.administrative_approval_remarks);
     const actorEmpcode = normalizeText(payload.actor_empcode);
     const actorName = normalizeText(payload.actor_name);
 
-    if (!indentDocumentPath) {
-      const error = new Error("Indent upload is required.");
-      error.statusCode = 400;
-      throw error;
-    }
-
-    if (!items.length) {
-      const error = new Error("At least one indent item is required.");
-      error.statusCode = 400;
-      throw error;
-    }
-
-    for (const item of items) {
-      if (!item.item_name) {
-        const error = new Error("Each indent item must have an item name.");
-        error.statusCode = 400;
-        throw error;
-      }
-      if (!item.quantity) {
-        const error = new Error("Each indent item must have quantity.");
-        error.statusCode = 400;
-        throw error;
-      }
-      if (!item.unit) {
-        const error = new Error("Each indent item must have unit.");
-        error.statusCode = 400;
-        throw error;
-      }
-      if (!item.category_id) {
-        const error = new Error("Each indent item must have category.");
-        error.statusCode = 400;
-        throw error;
-      }
-      if (!item.subcategory_id) {
-        const error = new Error("Each indent item must have sub category.");
-        error.statusCode = 400;
-        throw error;
-      }
-      const [category, subcategory] = await Promise.all([
-        this.repository.findItemCategoryByPk(item.category_id),
-        this.repository.findItemSubcategoryByPk(item.subcategory_id),
-      ]);
-      if (!category || !category.is_active) {
-        const error = new Error("Selected item category is invalid or inactive.");
-        error.statusCode = 400;
-        throw error;
-      }
-      if (
-        !subcategory ||
-        !subcategory.is_active ||
-        Number(subcategory.category_id) !== Number(item.category_id)
-      ) {
-        const error = new Error("Selected item sub category is invalid for the chosen category.");
-        error.statusCode = 400;
-        throw error;
-      }
-      if (item.specific_make_required && !item.preferred_make) {
-        const error = new Error("Specific make / company name is required when specific make is marked yes.");
-        error.statusCode = 400;
-        throw error;
-      }
-    }
+    if (!draft) await this.validateFinalIndent({ indentPayload, items });
 
     const creator = actorEmpcode
       ? await this.repository.findProcurementEmployeeByEmpcode(actorEmpcode)
       : null;
 
     const indent = await this.repository.withTransaction(async (transaction) => {
-      const systemIndentNo = await this.generateSystemIndentNo(
-        { receivedDate, departmentName, locationScope },
-        transaction,
-      );
+      const systemIndentNo = draft
+        ? null
+        : await this.generateSystemIndentNo(
+            { receivedDate: indentPayload.received_date },
+            transaction,
+          );
       const createdIndent = await this.repository.createIndent(
         {
           system_indent_no: systemIndentNo,
-          indent_no: indentNo,
-          indent_date: indentDate,
-          department_name: departmentName,
-          cfms_no: cfmsNo,
-          received_date: receivedDate,
-          indent_document_path: indentDocumentPath,
-          administrative_approval_document_path: administrativeApprovalDocumentPath,
-          specification_document_path: specificationDocumentPath,
-          administrative_approval_remarks: administrativeApprovalRemarks,
-          status: "received",
-          location_scope: locationScope,
-          remarks: normalizeNullableText(payload.remarks),
+          ...indentPayload,
+          status: draft ? "draft" : "received",
           created_by: creator?.id || null,
           updated_by: creator?.id || null,
         },
         { transaction },
       );
 
-      const createdItems = await this.repository.bulkCreateItems(
-        items.map((item) => ({
-          indent_id: createdIndent.id,
-          category_id: item.category_id,
-          subcategory_id: item.subcategory_id,
-          item_name: item.item_name,
-          quantity: item.quantity,
-          unit: item.unit,
-          specification: item.specification,
-          specific_make_required: item.specific_make_required,
-          estimated_rate: null,
-          estimated_amount: null,
-          preferred_make: item.preferred_make,
-          administrative_approval_required: item.administrative_approval_required,
-          administrative_approval_document_path: null,
-          assigned_procurement_officer_id: null,
-          assigned_at: null,
-          assignment_status: "unassigned",
-          procurement_decision_status: "pending",
-          return_reason: null,
-          returned_at: null,
-          estimated_by_procurement_officer_id: null,
-          estimated_at: null,
-          remarks: item.remarks,
-          created_by: creator?.id || null,
-          updated_by: creator?.id || null,
-        })),
-        { transaction },
-      );
+      const createdItems = items.length
+        ? await this.repository.bulkCreateItems(
+            items.map((item) =>
+              this.buildItemCreatePayload(item, createdIndent.id, creator?.id || null),
+            ),
+            { transaction },
+          )
+        : [];
 
-      for (const item of createdItems) {
-        if (!item?.id) continue;
-        await this.logItemEvent(transaction, {
-          indent_item_id: item.id,
-          event_type: "indent_item_created",
-          actor_procurement_employee_id: creator?.id || null,
-          details: `${this.resolveActorLabel({ actorEmployee: creator, actorName, actorEmpcode })} created this indent item at inward stage.`,
-        });
+      if (!draft) {
+        for (const item of createdItems) {
+          if (!item?.id) continue;
+          await this.logItemEvent(transaction, {
+            indent_item_id: item.id,
+            event_type: "indent_item_created",
+            actor_procurement_employee_id: creator?.id || null,
+            details: `${this.resolveActorLabel({ actorEmployee: creator, actorName, actorEmpcode })} created this indent item at inward stage.`,
+          });
+        }
       }
 
       return createdIndent;
     });
+
+    return this.getById(indent.id);
+  }
+
+  async update(id, payload = {}) {
+    const indent = await this.repository.findByPk(asId(id, "Indent id"));
+    if (!indent) throw notFound("Indent not found.");
+
+    const isDraftIndent = this.getCurrentStatus(indent.status) === "draft";
+    const approvedChangeRequest = isDraftIndent
+      ? null
+      : await this.assertApprovedIndentChangeRequest(indent.id, payload);
+
+    const draft = this.isDraftPayload(payload);
+    if (!isDraftIndent && draft) {
+      const error = new Error("Approved saved-record edits must be submitted, not saved as draft.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const indentPayload = this.buildIndentPayload(payload, { draft });
+    const items = this.normalizeIndentItems(payload.items);
+    const actorEmpcode = normalizeText(payload.actor_empcode);
+    const actorName = normalizeText(payload.actor_name);
+
+    if (!draft) await this.validateFinalIndent({ indentPayload, items });
+
+    const actor = actorEmpcode
+      ? await this.repository.findProcurementEmployeeByEmpcode(actorEmpcode)
+      : null;
+
+    await this.repository.withTransaction(async (transaction) => {
+      const systemIndentNo = draft
+        ? indent.system_indent_no || null
+        : indent.system_indent_no ||
+          (await this.generateSystemIndentNo(
+            { receivedDate: indentPayload.received_date },
+            transaction,
+          ));
+
+      const nextStatus = isDraftIndent
+        ? draft
+          ? "draft"
+          : "received"
+        : indent.status || this.deriveIndentStatus(indent.items);
+
+      await this.repository.updateIndent(
+        indent,
+        {
+          system_indent_no: systemIndentNo,
+          ...indentPayload,
+          status: nextStatus,
+          updated_by: actor?.id || null,
+        },
+        { transaction },
+      );
+
+      let createdItems = [];
+
+      if (isDraftIndent) {
+        await this.repository.deleteItemsByIndentId(indent.id, { transaction });
+        createdItems = items.length
+          ? await this.repository.bulkCreateItems(
+              items.map((item) =>
+                this.buildItemCreatePayload(item, indent.id, actor?.id || null),
+              ),
+              { transaction },
+            )
+          : [];
+      } else {
+        const existingItems = Array.isArray(indent.items) ? indent.items : [];
+        const existingById = new Map(
+          existingItems.map((item) => [Number(item.id), item]),
+        );
+
+        for (const item of items) {
+          if (item.id && existingById.has(Number(item.id))) {
+            await this.repository.updateIndentItem(
+              existingById.get(Number(item.id)),
+              this.buildItemUpdatePayload(item, actor?.id || null),
+              { transaction },
+            );
+            continue;
+          }
+
+          const [createdItem] = await this.repository.bulkCreateItems(
+            [this.buildItemCreatePayload(item, indent.id, actor?.id || null)],
+            { transaction },
+          );
+          if (createdItem) createdItems.push(createdItem);
+        }
+      }
+
+      if (!draft) {
+        for (const item of createdItems) {
+          if (!item?.id) continue;
+          await this.logItemEvent(transaction, {
+            indent_item_id: item.id,
+            event_type: "indent_item_created",
+            actor_procurement_employee_id: actor?.id || null,
+            details: isDraftIndent
+              ? `${this.resolveActorLabel({ actorEmployee: actor, actorName, actorEmpcode })} submitted this draft indent item at inward stage.`
+              : `${this.resolveActorLabel({ actorEmployee: actor, actorName, actorEmpcode })} added this item through an approved saved-record update.`,
+          });
+        }
+      }
+    });
+
+    if (approvedChangeRequest) {
+      await this.approvalService.markApplied(
+        approvedChangeRequest.id,
+        { applied_payload: payload },
+        {
+          employee_id: actor?.id || null,
+          name: this.resolveActorLabel({ actorEmployee: actor, actorName, actorEmpcode }),
+        },
+      );
+    }
 
     return this.getById(indent.id);
   }

@@ -6,6 +6,7 @@ import {
   ChevronsUpDown,
   BriefcaseBusiness,
   Building2,
+  CalendarCheck2,
   ChevronDown,
   ChevronRight,
   ClipboardList,
@@ -20,13 +21,20 @@ import {
   ReceiptIndianRupee,
   Settings,
   ShieldCheck,
+  Sparkles,
   Tags,
   X,
 } from "lucide-react";
 
 import AccountProfilePopover from "@/components/AccountProfilePopover";
 import { Button } from "@/components/ui/button";
-import { canAccessModule, formatRoleLabel, getCurrentUserRoles, PMS_ROLES } from "@/lib/roles";
+import {
+  canAccessModule,
+  formatRoleLabel,
+  getCurrentUserRoles,
+  isIndentInitiatorScopedUser,
+  PMS_ROLES,
+} from "@/lib/roles";
 
 const navigationGroups = [
   {
@@ -37,6 +45,12 @@ const navigationGroups = [
         path: "/dashboard",
         icon: Home,
         roles: [PMS_ROLES.ADMIN, PMS_ROLES.USER, PMS_ROLES.VIEWER, PMS_ROLES.ASSOCIATE, PMS_ROLES.INDENT_INITIATOR, PMS_ROLES.PROCUREMENT_OFFICER, PMS_ROLES.FINANCE_OFFICER, PMS_ROLES.APPROVER],
+      },
+      {
+        label: "My Work",
+        path: "/my-work",
+        icon: CalendarCheck2,
+        roles: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN, PMS_ROLES.USER, PMS_ROLES.VIEWER, PMS_ROLES.ASSOCIATE, PMS_ROLES.INDENT_INITIATOR, PMS_ROLES.PROCUREMENT_OFFICER, PMS_ROLES.FINANCE_OFFICER, PMS_ROLES.APPROVER],
       },
     ],
   },
@@ -109,10 +123,16 @@ const navigationGroups = [
         roles: [PMS_ROLES.PROCUREMENT_OFFICER, PMS_ROLES.FINANCE_OFFICER, PMS_ROLES.APPROVER, PMS_ROLES.VIEWER],
       },
       {
-        label: "Approvals",
+        label: "Approval Requests",
+        path: "/approval-requests",
+        icon: ClipboardList,
+        roles: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN, PMS_ROLES.APPROVER],
+      },
+      {
+        label: "Approval Setup",
         path: "/approvals",
         icon: ShieldCheck,
-        roles: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN, PMS_ROLES.APPROVER],
+        roles: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
       },
     ],
   },
@@ -136,6 +156,12 @@ const navigationGroups = [
         path: "/item-categories",
         icon: Tags,
         roles: [PMS_ROLES.ASSOCIATE, PMS_ROLES.PROCUREMENT_OFFICER, PMS_ROLES.APPROVER],
+      },
+      {
+        label: "Specification Templates",
+        path: "/specification-templates",
+        icon: Sparkles,
+        roles: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
       },
       {
         label: "Administration",
@@ -164,6 +190,8 @@ const getInitials = (name) => {
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
   return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
 };
+
+const indentInitiatorAllowedPaths = new Set(["/dashboard", "/my-work", "/indents"]);
 
 function SidebarLink({ item, onNavigate }) {
   const Icon = item.icon;
@@ -218,13 +246,20 @@ function SidebarContent({ onNavigate }) {
   }, [location.pathname]);
 
   const visibleGroups = useMemo(
-    () =>
-      navigationGroups
+    () => {
+      const scopedToIndents = isIndentInitiatorScopedUser(roles);
+      return navigationGroups
         .map((group) => ({
           ...group,
-          items: group.items.filter((item) => canAccessModule(roles, item.roles)),
+          items: group.items.filter((item) => {
+            if (scopedToIndents && !indentInitiatorAllowedPaths.has(item.path)) {
+              return false;
+            }
+            return canAccessModule(roles, item.roles);
+          }),
         }))
-        .filter((group) => group.items.length),
+        .filter((group) => group.items.length);
+    },
     [roles],
   );
 

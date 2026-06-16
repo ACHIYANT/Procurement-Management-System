@@ -103,6 +103,25 @@ class ApprovalRepository {
     });
   }
 
+  findApprovedChangeRequest(
+    { id, moduleKey, actionKey = "change_saved_record", entityType, entityId },
+    transaction,
+  ) {
+    return ApprovalRequest.findOne({
+      where: {
+        ...(id ? { id } : {}),
+        module_key: moduleKey,
+        action_key: actionKey,
+        entity_type: entityType,
+        entity_id: String(entityId),
+        status: "approved",
+      },
+      include: requestIncludes,
+      order: [["id", "DESC"]],
+      transaction,
+    });
+  }
+
   createRequest(payload, transaction) {
     return ApprovalRequest.create(payload, { transaction });
   }

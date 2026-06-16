@@ -33,9 +33,8 @@ module.exports = (sequelize, DataTypes) => {
     {
       indent_no: {
         type: DataTypes.STRING(120),
-        allowNull: false,
+        allowNull: true,
         unique: true,
-        validate: { notEmpty: true },
       },
       system_indent_no: {
         type: DataTypes.STRING(140),
@@ -44,12 +43,11 @@ module.exports = (sequelize, DataTypes) => {
       },
       indent_date: {
         type: DataTypes.DATEONLY,
-        allowNull: false,
+        allowNull: true,
       },
       department_name: {
         type: DataTypes.STRING(160),
-        allowNull: false,
-        validate: { notEmpty: true },
+        allowNull: true,
       },
       cfms_no: {
         type: DataTypes.STRING(120),
@@ -57,7 +55,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       received_date: {
         type: DataTypes.DATEONLY,
-        allowNull: false,
+        allowNull: true,
       },
       indent_document_path: {
         type: DataTypes.STRING(255),

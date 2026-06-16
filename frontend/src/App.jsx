@@ -3,6 +3,7 @@ import "./App.css";
 import Login from "./pages/Login";
 import ActivateAccount from "./pages/ActivateAccount";
 import Dashboard from "./pages/Dashboard";
+import WorkDesk from "./pages/WorkDesk";
 import EmdManagement from "./pages/EmdManagement";
 import EmdList from "./pages/EmdList";
 import PbgList from "./pages/PbgList";
@@ -19,6 +20,7 @@ import EmpanelmentList from "./pages/EmpanelmentList";
 import EmpanelmentForm from "./pages/EmpanelmentForm";
 import EmpanelmentDetail from "./pages/EmpanelmentDetail";
 import ItemCategoryMaster from "./pages/ItemCategoryMaster";
+import ItemSpecificationTemplateMaster from "./pages/ItemSpecificationTemplateMaster";
 import TenderList from "./pages/TenderList";
 import TenderForm from "./pages/TenderForm";
 import TenderDetail from "./pages/TenderDetail";
@@ -51,6 +53,7 @@ function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<ProtectedRoute moduleKey="dashboard"><Dashboard /></ProtectedRoute>} />
+            <Route path="/my-work" element={<ProtectedRoute moduleKey="workTasks"><WorkDesk /></ProtectedRoute>} />
             <Route path="/emd" element={<ProtectedRoute moduleKey="emd"><EmdList /></ProtectedRoute>} />
             <Route path="/emd/new" element={<ProtectedRoute moduleKey="emd" action="create"><EmdManagement /></ProtectedRoute>} />
             <Route path="/emd/:id/edit" element={<ProtectedRoute moduleKey="emd" action="manage"><EmdEdit /></ProtectedRoute>} />
@@ -63,9 +66,11 @@ function App() {
             <Route path="/reconciliation/:departmentName" element={<ProtectedRoute moduleKey="reconciliation"><ReconciliationDepartmentDetail /></ProtectedRoute>} />
             <Route path="/indents" element={<ProtectedRoute moduleKey="indents"><IndentList /></ProtectedRoute>} />
             <Route path="/indents/new" element={<ProtectedRoute moduleKey="indents" action="create"><IndentForm /></ProtectedRoute>} />
+            <Route path="/indents/:id/edit" element={<ProtectedRoute moduleKey="indents" action="create"><IndentForm /></ProtectedRoute>} />
             <Route path="/indents/:id" element={<ProtectedRoute moduleKey="indents"><IndentDetail /></ProtectedRoute>} />
             <Route path="/procurement-cases" element={<ProtectedRoute moduleKey="procurementCases"><ProcurementCaseList /></ProtectedRoute>} />
             <Route path="/procurement-cases/new" element={<ProtectedRoute moduleKey="procurementCases" action="create" allowAdminOverride={false}><ProcurementCaseForm /></ProtectedRoute>} />
+            <Route path="/procurement-cases/:id/edit" element={<ProtectedRoute moduleKey="procurementCases"><ProcurementCaseForm /></ProtectedRoute>} />
             <Route path="/procurement-cases/:id" element={<ProtectedRoute moduleKey="procurementCases"><ProcurementCaseDetail /></ProtectedRoute>} />
             <Route path="/tenders" element={<ProtectedRoute moduleKey="tenders"><TenderList /></ProtectedRoute>} />
             <Route path="/tenders/new" element={<ProtectedRoute moduleKey="tenders" action="create"><TenderForm /></ProtectedRoute>} />
@@ -95,8 +100,10 @@ function App() {
             <Route path="/empanelments/new" element={<ProtectedRoute moduleKey="empanelments" action="create"><EmpanelmentForm /></ProtectedRoute>} />
             <Route path="/empanelments/:id" element={<ProtectedRoute moduleKey="empanelments"><EmpanelmentDetail /></ProtectedRoute>} />
             <Route path="/item-categories" element={<ProtectedRoute moduleKey="itemCategories"><ItemCategoryMaster /></ProtectedRoute>} />
+            <Route path="/specification-templates" element={<ProtectedRoute moduleKey="specificationTemplates"><ItemSpecificationTemplateMaster /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute moduleKey="reports"><Reports /></ProtectedRoute>} />
             <Route path="/approvals" element={<ProtectedRoute moduleKey="approvals"><ApprovalCenter /></ProtectedRoute>} />
+            <Route path="/approval-requests" element={<ProtectedRoute moduleKey="approvals"><ApprovalCenter requestsOnly /></ProtectedRoute>} />
             <Route path="/administration" element={<ProtectedRoute moduleKey="administration"><Administration /></ProtectedRoute>} />
             <Route path="/administration/procurement-employees/new" element={<ProtectedRoute moduleKey="administration" action="manage"><ProcurementEmployeeForm /></ProtectedRoute>} />
             <Route path="/administration/procurement-employees/:id/edit" element={<ProtectedRoute moduleKey="administration" action="manage"><ProcurementEmployeeForm /></ProtectedRoute>} />
