@@ -14,8 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
-pdfjs.GlobalWorkerOptions.workerPort = new PdfWorker();
-
 const THUMBNAIL_ROW_HEIGHT = 176;
 const THUMBNAIL_MIN_COLUMN_WIDTH = 150;
 const PREVIEW_ROW_HEIGHT = 1320;
@@ -51,6 +49,26 @@ const isPdfJsCancellation = (error) => {
     message.includes("Worker was destroyed") ||
     message.includes("Worker task was terminated")
   );
+};
+
+const createInlinePdfWorker = () =>
+  new pdfjs.PDFWorker({ port: new PdfWorker() });
+
+const destroyPdfResources = async ({ loadingTask, pdfDocument, pdfWorker, sourceUrl }) => {
+  try {
+    if (pdfDocument?.destroy) {
+      await pdfDocument.destroy();
+    } else if (loadingTask?.destroy) {
+      await loadingTask.destroy();
+    }
+  } catch (destroyError) {
+    if (!isPdfJsCancellation(destroyError)) {
+      // Swallow cleanup errors; the next file load should not be blocked by teardown.
+    }
+  } finally {
+    pdfWorker?.destroy?.();
+    if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+  }
 };
 
 const clampNumber = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -700,6 +718,7 @@ export default function PdfPageSelectionDialog({
     let sourceUrl = "";
     let loadingTask = null;
     let loadedPdf = null;
+    let pdfWorker = null;
     const loadPdf = async () => {
       try {
         setLoading(true);
@@ -707,11 +726,18 @@ export default function PdfPageSelectionDialog({
         setPdfDocument(null);
 
         sourceUrl = URL.createObjectURL(file);
-        loadingTask = pdfjs.getDocument({ url: sourceUrl });
+        pdfWorker = createInlinePdfWorker();
+        loadingTask = pdfjs.getDocument({ url: sourceUrl, worker: pdfWorker });
         const pdf = await loadingTask.promise;
         loadedPdf = pdf;
         if (cancelled) {
-          await pdf.destroy();
+          await destroyPdfResources({
+            loadingTask,
+            pdfDocument: pdf,
+            pdfWorker,
+            sourceUrl,
+          });
+          sourceUrl = "";
           return;
         }
 
@@ -740,13 +766,13 @@ export default function PdfPageSelectionDialog({
 
     return () => {
       cancelled = true;
-      if (loadedPdf) {
-        loadedPdf.destroy?.();
-      } else {
-        loadingTask?.destroy?.();
-      }
       setPdfDocument(null);
-      if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+      void destroyPdfResources({
+        loadingTask,
+        pdfDocument: loadedPdf,
+        pdfWorker,
+        sourceUrl,
+      });
     };
   }, [file, open]);
 
