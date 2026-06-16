@@ -87,6 +87,7 @@ const emptyAdditionalDocumentForm = () => ({
 const additionalDocumentTypes = [
   { value: "department_communication", label: "Department Communication" },
   { value: "clarification", label: "Clarification" },
+  { value: "estimate", label: "Estimate" },
   { value: "revised_indent", label: "Revised Indent" },
   { value: "specification", label: "Specification" },
   { value: "administrative_approval", label: "Administrative Approval" },
@@ -104,9 +105,18 @@ const actionPrimaryClass =
   "rounded-full bg-[#0071e3] text-white hover:bg-[#0066cc]";
 const actionSecondaryClass =
   "rounded-full border border-black/10 bg-white text-[#1d1d1f] hover:bg-[#f5f5f7]";
-const metaTileClass = "rounded-xl bg-white px-3 py-2 ring-1 ring-black/6";
-const metaLabelClass = "text-[10px] uppercase tracking-wide text-black/42";
-const metaValueClass = "mt-1 text-sm font-medium text-[#1d1d1f]";
+const workflowCardClass =
+  "overflow-hidden rounded-[30px] bg-gradient-to-br from-white via-white to-[#f8f8fb] shadow-[0_24px_70px_-52px_rgba(0,0,0,0.42)] ring-1 ring-black/8";
+const workflowStatClass =
+  "rounded-[22px] bg-white/86 px-4 py-3 shadow-[0_14px_35px_-30px_rgba(0,0,0,0.42)] ring-1 ring-black/6";
+const workflowStatLabelClass =
+  "text-[10px] font-semibold uppercase tracking-[0.2em] text-black/38";
+const workflowStatValueClass =
+  "mt-1.5 text-[15px] font-semibold leading-5 text-[#1d1d1f]";
+const workflowMetaPillClass =
+  "inline-flex items-center gap-1.5 rounded-full bg-[#f5f5f7] px-3 py-1.5 text-xs font-medium text-black/58 ring-1 ring-black/6";
+const actionPanelClass =
+  "rounded-[26px] border bg-white/74 p-4 shadow-[0_18px_45px_-38px_rgba(0,0,0,0.45)] backdrop-blur";
 
 const calculateEstimatedAmount = (item, estimatedRate) => {
   const rate = Number(estimatedRate || 0);
@@ -933,19 +943,23 @@ export default function IndentDetail() {
               <CardContent
                 className={isOfficerFocusedView ? "space-y-3 p-4" : "space-y-4"}
               >
-                <details>
-                  <summary className="cursor-pointer list-none">
-                    <div>
-                      <h2 className={sectionTitleClass}>Indent Items Workflow</h2>
-                      <p className={sectionSubtitleClass}>
-                        Click to review item assignment, estimates, return notes, and procurement movement.
-                      </p>
-                    </div>
-                  </summary>
+                <div>
+                  <h2 className={sectionTitleClass}>Indent Items Workflow</h2>
+                  <p className={sectionSubtitleClass}>
+                    Review item assignment, estimates, return notes, and
+                    procurement movement.
+                  </p>
+                </div>
 
                 <div
                   className={`${isOfficerFocusedView ? "space-y-3" : "space-y-4"} mt-4`}
                 >
+                  {!visibleItems.length ? (
+                    <div className={dashedPanelClass}>
+                      No indent items are available for your current view.
+                    </div>
+                  ) : null}
+
                   {visibleItems.map((item, index) => {
                     const itemId = item.id;
                     const assignmentValue = assignmentValues[itemId] ?? "";
@@ -960,134 +974,101 @@ export default function IndentDetail() {
                     const canWorkOnItem =
                       roles.includes(PMS_ROLES.PROCUREMENT_OFFICER) &&
                       isMyAssignedItem;
+                    const categoryName = item.category?.category_name || "Uncategorized";
+                    const subcategoryName = item.subcategory?.subcategory_name || "NA";
+                    const primaryFacts = [
+                      ["Quantity", `${formatQuantity(item.quantity)} ${item.unit || ""}`],
+                      ["Estimate", compactMoney(item.estimated_amount), money(item.estimated_amount)],
+                      [
+                        "Admin Approval",
+                        item.administrative_approval_required
+                          ? "Required"
+                          : "Not Required",
+                      ],
+                      ["Make / Company", item.preferred_make || "NA"],
+                    ];
+                    const metaFacts = [
+                      ["Category", categoryName],
+                      ["Sub category", subcategoryName],
+                      ["Specific make", item.specific_make_required ? "Yes" : "No"],
+                      [
+                        "Assigned",
+                        item.procurement_officer?.employee_name || "Unassigned",
+                      ],
+                      [
+                        "Estimated by",
+                        item.estimated_by_officer?.employee_name || "Pending",
+                      ],
+                    ];
 
                     return (
                       <div
                         key={itemId}
-                        className={`rounded-[24px] bg-white p-3 shadow-[0_18px_40px_-34px_rgba(0,0,0,0.22)] ring-1 ring-black/8 ${isOfficerFocusedView ? "" : "md:p-4"}`}
+                        className={workflowCardClass}
                       >
                         <div
-                          className={`flex flex-col ${isOfficerFocusedView ? "gap-2" : "gap-3"} md:flex-row md:items-start md:justify-between`}
+                          className={`${isOfficerFocusedView ? "px-4 py-4" : "px-5 py-5"} flex flex-col gap-4 md:flex-row md:items-start md:justify-between`}
                         >
                           <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-black/42">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-black/38">
                               Item {index + 1}
                             </p>
                             <h3
-                              className={`${isOfficerFocusedView ? "text-base" : "text-lg"} font-semibold text-[#1d1d1f]`}
-                            >
-                              {item.category?.category_name || "Uncategorized"}{" "}
-                              | {item.subcategory?.subcategory_name || "NA"}
-                            </h3>
-                            <p
-                              className={`${isOfficerFocusedView ? "mt-0.5 text-xs" : "mt-1 text-[15px]"} font-medium text-black/58`}
+                              className={`${isOfficerFocusedView ? "text-[1.15rem]" : "text-[1.35rem]"} mt-1 font-semibold tracking-[-0.035em] text-[#1d1d1f]`}
                             >
                               {item.item_name || "Item name not available"}
+                            </h3>
+                            <p
+                              className={`${isOfficerFocusedView ? "mt-1 text-sm" : "mt-1.5 text-[15px]"} font-medium text-black/54`}
+                            >
+                              {categoryName} / {subcategoryName}
                             </p>
                           </div>
-                          <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
+                          <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide md:justify-end">
                             <span
-                              className={`rounded-full px-3 py-1 ${assignmentChipClass(item.assignment_status)}`}
+                              className={`rounded-full px-3 py-1.5 ${assignmentChipClass(item.assignment_status)}`}
                             >
                               {label(item.assignment_status)}
                             </span>
-                            <span className="rounded-full bg-[#f0f7ff] px-3 py-1 text-[#0066cc]">
+                            <span className="rounded-full bg-[#f0f7ff] px-3 py-1.5 text-[#0066cc]">
                               {label(item.procurement_decision_status)}
                             </span>
                           </div>
                         </div>
 
                         <div
-                          className={`${isOfficerFocusedView ? "mt-2 grid gap-1.5 md:grid-cols-4 xl:grid-cols-9" : "mt-3 grid gap-2 md:grid-cols-3"}`}
+                          className={`${isOfficerFocusedView ? "grid gap-2 px-4 pb-3 sm:grid-cols-2 xl:grid-cols-4" : "grid gap-3 px-5 pb-4 sm:grid-cols-2 xl:grid-cols-4"}`}
                         >
-                          <div
-                            className={`${metaTileClass} ${isOfficerFocusedView ? "px-2.5 py-1.5" : ""}`}
-                          >
-                            <p className={metaLabelClass}>Category</p>
-                            <p className={metaValueClass}>
-                              {item.category?.category_name || "Uncategorized"}
-                            </p>
-                          </div>
-                          <div
-                            className={`${metaTileClass} ${isOfficerFocusedView ? "px-2.5 py-1.5" : ""}`}
-                          >
-                            <p className={metaLabelClass}>Sub Category</p>
-                            <p className={metaValueClass}>
-                              {item.subcategory?.subcategory_name || "NA"}
-                            </p>
-                          </div>
-                          <div
-                            className={`${metaTileClass} ${isOfficerFocusedView ? "px-2.5 py-1.5" : ""}`}
-                          >
-                            <p className={metaLabelClass}>Quantity</p>
-                            <p className={metaValueClass}>
-                              {formatQuantity(item.quantity)} {item.unit}
-                            </p>
-                          </div>
-                          <div
-                            className={`${metaTileClass} ${isOfficerFocusedView ? "px-2.5 py-1.5" : ""}`}
-                          >
-                            <p className={metaLabelClass}>Specific Make</p>
-                            <p className={metaValueClass}>
-                              {item.specific_make_required ? "Yes" : "No"}
-                            </p>
-                          </div>
-                          <div
-                            className={`${metaTileClass} ${isOfficerFocusedView ? "px-2.5 py-1.5" : ""}`}
-                          >
-                            <p className={metaLabelClass}>Assigned Officer</p>
-                            <p className={metaValueClass}>
-                              {item.procurement_officer?.employee_name ||
-                                "Unassigned"}
-                            </p>
-                          </div>
-                          <div
-                            className={`${metaTileClass} ${isOfficerFocusedView ? "px-2.5 py-1.5" : ""}`}
-                          >
-                            <p className={metaLabelClass}>
-                              Administrative Approval
-                            </p>
-                            <p className={metaValueClass}>
-                              {item.administrative_approval_required
-                                ? "Required"
-                                : "Not Required"}
-                            </p>
-                          </div>
-                          <div
-                            className={`${metaTileClass} ${isOfficerFocusedView ? "px-2.5 py-1.5" : ""}`}
-                          >
-                            <p className={metaLabelClass}>
-                              Specific Make / Company
-                            </p>
-                            <p className={metaValueClass}>
-                              {item.preferred_make || "NA"}
-                            </p>
-                          </div>
-                          <div
-                            className={`${metaTileClass} ${isOfficerFocusedView ? "px-2.5 py-1.5" : ""}`}
-                          >
-                            <p className={metaLabelClass}>Estimated Value</p>
-                            <p
-                              className={metaValueClass}
-                              title={money(item.estimated_amount)}
+                          {primaryFacts.map(([factLabel, factValue, fullValue]) => (
+                            <div
+                              key={factLabel}
+                              className={workflowStatClass}
                             >
-                              {compactMoney(item.estimated_amount)}
-                            </p>
-                          </div>
-                          <div
-                            className={`${metaTileClass} ${isOfficerFocusedView ? "px-2.5 py-1.5" : ""}`}
-                          >
-                            <p className={metaLabelClass}>Estimated By</p>
-                            <p className={metaValueClass}>
-                              {item.estimated_by_officer?.employee_name ||
-                                "Pending"}
-                            </p>
+                              <p className={workflowStatLabelClass}>{factLabel}</p>
+                              <p
+                                className={workflowStatValueClass}
+                                title={fullValue || String(factValue || "")}
+                              >
+                                {factValue}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className={`${isOfficerFocusedView ? "px-4 pb-3" : "px-5 pb-4"}`}>
+                          <div className="flex flex-wrap gap-2">
+                            {metaFacts.map(([factLabel, factValue]) => (
+                              <span key={factLabel} className={workflowMetaPillClass}>
+                                <span className="text-black/38">{factLabel}:</span>
+                                <span className="text-[#1d1d1f]">{factValue}</span>
+                              </span>
+                            ))}
                           </div>
                         </div>
 
                         {item.specification ? (
                           <div
-                            className={`mt-2 rounded-[20px] bg-[#f5f5f7] ring-1 ring-black/6 ${isOfficerFocusedView ? "px-3 py-2" : "px-4 py-3"}`}
+                            className={`${isOfficerFocusedView ? "mx-4 mb-3 px-4 py-3" : "mx-5 mb-4 px-4 py-3"} rounded-[22px] bg-[#f5f5f7] ring-1 ring-black/6`}
                           >
                             <p className="text-[10px] font-semibold uppercase tracking-wide text-black/42">
                               Specification
@@ -1100,7 +1081,7 @@ export default function IndentDetail() {
 
                         {item.return_reason ? (
                           <div
-                            className={`mt-2 rounded-[20px] bg-[#fff6f6] ring-1 ring-rose-200 ${isOfficerFocusedView ? "px-3 py-2" : "px-4 py-3"}`}
+                            className={`${isOfficerFocusedView ? "mx-4 mb-3 px-4 py-3" : "mx-5 mb-4 px-4 py-3"} rounded-[22px] bg-[#fff6f6] ring-1 ring-rose-200`}
                           >
                             <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">
                               Return Reason
@@ -1112,7 +1093,7 @@ export default function IndentDetail() {
                         ) : null}
 
                         {isAdmin ? (
-                          <div className="mt-4 rounded-[20px] bg-[#f5f5f7] p-4 ring-1 ring-black/6">
+                          <div className={`${isOfficerFocusedView ? "mx-4 mb-4" : "mx-5 mb-5"} rounded-[24px] bg-[#f5f5f7] p-4 ring-1 ring-black/6`}>
                             <div className="mb-3">
                               <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-black/42">
                                 Admin Control
@@ -1236,28 +1217,26 @@ export default function IndentDetail() {
                         ) : null}
 
                         {canWorkOnItem ? (
-                          <div
-                            className={`mt-3 grid gap-3 ${isOfficerFocusedView ? "xl:grid-cols-[1.1fr_0.9fr]" : "xl:grid-cols-[1fr_0.95fr]"}`}
-                          >
+                          <div className={`${isOfficerFocusedView ? "mx-4 mb-4" : "mx-5 mb-5"} grid gap-4 xl:grid-cols-2`}>
                             <div
-                              className={`rounded-[22px] bg-[#f6fbf7] ring-1 ring-emerald-200 ${isOfficerFocusedView ? "p-2.5" : "p-4"}`}
+                              className={`${actionPanelClass} border-emerald-100 bg-gradient-to-br from-emerald-50/95 to-white ring-1 ring-emerald-100`}
                             >
-                              <div className="flex items-center justify-between gap-2">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                  <p className="text-sm font-semibold text-emerald-950">
+                                  <p className="text-base font-semibold tracking-[-0.02em] text-emerald-950">
                                     Estimate This Item
                                   </p>
-                                  <p className="mt-0.5 text-xs text-emerald-800/80">
-                                    Record rate and value so the item can move
-                                    forward into procurement planning.
+                                  <p className="mt-1 text-sm text-emerald-800/78">
+                                    Record rate and value for procurement
+                                    planning.
                                   </p>
                                 </div>
-                                <span className="text-[11px] uppercase tracking-wide text-emerald-700">
+                                <span className="w-fit rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
                                   Officer Action
                                 </span>
                               </div>
                               <div
-                                className={`mt-3 grid ${isOfficerFocusedView ? "gap-1.5 lg:grid-cols-[0.7fr_0.8fr_1fr_auto]" : "gap-3 md:grid-cols-2"}`}
+                                className="mt-4 grid gap-3 md:grid-cols-2"
                               >
                                 <label className="space-y-1">
                                   <span className="text-xs font-medium text-black/62">
@@ -1276,9 +1255,7 @@ export default function IndentDetail() {
                                         item,
                                       )
                                     }
-                                    className={
-                                      isOfficerFocusedView ? "h-8" : ""
-                                    }
+                                    className="h-11 rounded-2xl border-black/10 bg-white/90"
                                   />
                                 </label>
                                 <label className="space-y-1">
@@ -1297,18 +1274,16 @@ export default function IndentDetail() {
                                     disabled
                                     readOnly
                                     placeholder="Auto calculated"
-                                    className={
-                                      isOfficerFocusedView ? "h-8" : ""
-                                    }
+                                    className="h-11 rounded-2xl border-black/10 bg-white/72"
                                   />
                                 </label>
-                                <label className="space-y-1 lg:col-span-1">
+                                <label className="space-y-1 md:col-span-2">
                                   <span className="text-xs font-medium text-black/62">
                                     Officer Remarks
                                   </span>
                                   <textarea
-                                    rows={isOfficerFocusedView ? 1 : 3}
-                                    className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-[#1d1d1f]"
+                                    rows={2}
+                                    className="w-full rounded-2xl border border-black/10 bg-white/90 px-3 py-2 text-sm text-[#1d1d1f] outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
                                     value={estimateForm.remarks}
                                     onChange={(event) =>
                                       setEstimateField(
@@ -1319,10 +1294,10 @@ export default function IndentDetail() {
                                     }
                                   />
                                 </label>
-                                <div className="flex items-end lg:pb-0.5">
+                                <div className="flex justify-end md:col-span-2">
                                   <Button
                                     type="button"
-                                    className={`rounded-full bg-emerald-600 text-white hover:bg-emerald-700 ${isOfficerFocusedView ? "h-8 px-3 text-xs" : ""}`}
+                                    className="rounded-full bg-emerald-600 px-5 text-white shadow-[0_12px_24px_-18px_rgba(5,150,105,0.8)] hover:bg-emerald-700"
                                     disabled={
                                       !estimateForm.estimated_rate ||
                                       busyAction === `estimate-${itemId}`
@@ -1358,33 +1333,31 @@ export default function IndentDetail() {
                             </div>
 
                             <div
-                              className={`rounded-[22px] bg-[#fff6f6] ring-1 ring-rose-200 ${isOfficerFocusedView ? "p-2.5" : "p-4"}`}
+                              className={`${actionPanelClass} border-rose-100 bg-gradient-to-br from-rose-50/95 to-white ring-1 ring-rose-100`}
                             >
-                              <div className="flex items-center justify-between gap-2">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                  <p className="text-sm font-semibold text-rose-950">
+                                  <p className="text-base font-semibold tracking-[-0.02em] text-rose-950">
                                     Return Item To Admin
                                   </p>
-                                  <p className="mt-0.5 text-xs text-rose-800/80">
-                                    Send the item back with a clear reason when
-                                    procurement action should not continue
-                                    as-is.
+                                  <p className="mt-1 text-sm text-rose-800/78">
+                                    Send back with a clear reason.
                                   </p>
                                 </div>
-                                <span className="text-[11px] uppercase tracking-wide text-rose-700">
+                                <span className="w-fit rounded-full bg-rose-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-rose-700">
                                   Officer Action
                                 </span>
                               </div>
                               <div
-                                className={`mt-3 grid gap-1.5 ${isOfficerFocusedView ? "lg:grid-cols-[1.2fr_0.95fr_auto]" : ""}`}
+                                className="mt-4 grid gap-3"
                               >
                                 <label className="block space-y-1">
                                   <span className="text-xs font-medium text-black/62">
                                     Reason for return
                                   </span>
                                   <textarea
-                                    rows={isOfficerFocusedView ? 1 : 3}
-                                    className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-[#1d1d1f]"
+                                    rows={3}
+                                    className="w-full rounded-2xl border border-black/10 bg-white/90 px-3 py-2 text-sm text-[#1d1d1f] outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
                                     value={returnForm.return_reason}
                                     onChange={(event) =>
                                       setReturnField(
@@ -1401,8 +1374,8 @@ export default function IndentDetail() {
                                     Supporting remarks
                                   </span>
                                   <textarea
-                                    rows={isOfficerFocusedView ? 1 : 2}
-                                    className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-[#1d1d1f]"
+                                    rows={2}
+                                    className="w-full rounded-2xl border border-black/10 bg-white/90 px-3 py-2 text-sm text-[#1d1d1f] outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
                                     value={returnForm.remarks}
                                     onChange={(event) =>
                                       setReturnField(
@@ -1413,10 +1386,10 @@ export default function IndentDetail() {
                                     }
                                   />
                                 </label>
-                                <div className="flex items-end lg:pb-0.5">
+                                <div className="flex justify-end">
                                   <Button
                                     type="button"
-                                    className={`rounded-full bg-rose-600 text-white hover:bg-rose-700 ${isOfficerFocusedView ? "h-8 px-3 text-xs" : ""}`}
+                                    className="rounded-full bg-rose-600 px-5 text-white shadow-[0_12px_24px_-18px_rgba(225,29,72,0.75)] hover:bg-rose-700"
                                     disabled={
                                       !returnForm.return_reason ||
                                       busyAction === `return-${itemId}`
@@ -1454,7 +1427,6 @@ export default function IndentDetail() {
                     );
                   })}
                 </div>
-                </details>
               </CardContent>
             </Card>
           </div>

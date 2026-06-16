@@ -9,7 +9,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import FileAttachmentField from "@/components/FileAttachmentField";
 import FieldError from "@/components/FieldError";
@@ -109,6 +109,7 @@ const mapIndentToForm = (indent = {}) => ({
   items: Array.isArray(indent.items) && indent.items.length
     ? indent.items.map((item) => ({
         category_id: item.category_id ? String(item.category_id) : "",
+        id: item.id || "",
         subcategory_id: item.subcategory_id ? String(item.subcategory_id) : "",
         item_name: item.item_name || "",
         quantity: toQuantityInput(item.quantity),
@@ -291,7 +292,10 @@ function DepartmentPicker({ value, onChange, error, options }) {
 export default function IndentForm() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const isEditMode = Boolean(id);
+  const approvalRequestId = searchParams.get("approvalRequestId") || "";
+  const isApprovedSavedEdit = isEditMode && Boolean(approvalRequestId);
   const [currentUser] = useState(() => getCurrentUserProfile());
   const [form, setForm] = useState(initialForm);
   const [itemCategories, setItemCategories] = useState([]);
@@ -308,6 +312,7 @@ export default function IndentForm() {
     templates: [],
   });
   const [errors, setErrors] = useState({});
+  const [activeItemIndex, setActiveItemIndex] = useState(0);
   const [saving, setSaving] = useState("");
   const [popup, setPopup] = useState({
     open: false,
@@ -352,7 +357,10 @@ export default function IndentForm() {
       try {
         const data = await procurementRequest(`/indents/${id}`);
         if (ignore) return;
-        if (String(data?.status || "").toLowerCase() !== "draft") {
+        if (
+          String(data?.status || "").toLowerCase() !== "draft" &&
+          !approvalRequestId
+        ) {
           setPopup({
             open: true,
             type: "info",
@@ -362,6 +370,7 @@ export default function IndentForm() {
           return;
         }
         setForm(mapIndentToForm(data));
+        setActiveItemIndex(0);
         setPendingFiles({
           indent_document_path: null,
           specification_document_path: null,
@@ -382,7 +391,7 @@ export default function IndentForm() {
       ignore = true;
       clearTimeout(timer);
     };
-  }, [id, isEditMode, navigate]);
+  }, [approvalRequestId, id, isEditMode, navigate]);
 
   const uploadIndentDocument = async (file) => {
     const formData = new FormData();
@@ -483,6 +492,7 @@ export default function IndentForm() {
 
   const updateItem = (index, field) => (event) => {
     const value = event.target.value;
+    setActiveItemIndex(index);
     setForm((current) => {
       const items = current.items.map((item, itemIndex) => {
         if (itemIndex !== index) return item;
@@ -603,6 +613,7 @@ export default function IndentForm() {
       ...current,
       items: [...current.items, createBlankItem()],
     }));
+    setActiveItemIndex(form.items.length);
   };
 
   const removeItem = (index) => () => {
@@ -613,6 +624,13 @@ export default function IndentForm() {
           ? [createBlankItem()]
           : current.items.filter((_, itemIndex) => itemIndex !== index),
     }));
+    setActiveItemIndex((current) => {
+      const nextLength = Math.max(form.items.length - 1, 1);
+      if (nextLength === 1) return 0;
+      if (current === index) return Math.max(index - 1, 0);
+      if (current > index) return current - 1;
+      return Math.min(current, nextLength - 1);
+    });
   };
 
   const buildFinalValidationErrors = () => {
@@ -683,6 +701,7 @@ export default function IndentForm() {
     status: draft ? "draft" : "received",
     actor_empcode: currentUser?.empcode || "",
     actor_name: currentUser?.fullName || "",
+    approval_request_id: approvalRequestId || null,
     location_scope: "PANCHKULA",
     cfms_no: sourceForm.cfms_no || null,
     items: sourceForm.items.map((item) => ({
@@ -725,8 +744,13 @@ export default function IndentForm() {
       if (
         hasErrors(fieldErrors) ||
         itemErrors.some((itemError) => hasErrors(itemError))
-      )
+      ) {
+        const firstInvalidItemIndex = itemErrors.findIndex((itemError) =>
+          hasErrors(itemError),
+        );
+        if (firstInvalidItemIndex >= 0) setActiveItemIndex(firstInvalidItemIndex);
         return;
+      }
     } else {
       setErrors({});
     }
@@ -796,12 +820,18 @@ export default function IndentForm() {
               Indent Master
             </p>
             <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.04em] text-white md:text-[2.45rem]">
-              {isEditMode ? "Edit Draft Indent" : "Add Indent"}
+              {isApprovedSavedEdit
+                ? "Edit Approved Indent"
+                : isEditMode
+                  ? "Edit Draft Indent"
+                  : "Add Indent"}
             </h1>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-white/70 md:text-[15px]">
-              {isEditMode
-                ? "Continue a saved draft. Submit only when the inward letter, mandatory dates, upload, and item lines are complete."
-                : "Record the inward indent letter and its item lines. Save as draft if details are still being collected."}
+              {isApprovedSavedEdit
+                ? "An approved update request is linked with this indent. Submit the corrected record to close the request."
+                : isEditMode
+                  ? "Continue a saved draft. Submit only when the inward letter, mandatory dates, upload, and item lines are complete."
+                  : "Record the inward indent letter and its item lines. Save as draft if details are still being collected."}
             </p>
             </div>
           </div>
@@ -973,6 +1003,15 @@ export default function IndentForm() {
                   </div>
 
                   {form.items.map((item, index) => {
+                    const isActiveItem = index === activeItemIndex;
+                    const itemCategory = itemCategories.find(
+                      (category) => String(category.id) === String(item.category_id),
+                    );
+                    const itemSubcategory = itemCategory?.subcategories?.find(
+                      (subcategory) =>
+                        String(subcategory.id) === String(item.subcategory_id),
+                    );
+                    const itemHasErrors = hasErrors(errors.items?.[index] || {});
                     const specificationGroups = getSpecificationSuggestionGroups(
                       item,
                       itemCategories,
@@ -989,22 +1028,95 @@ export default function IndentForm() {
                     return (
                     <div
                       key={index}
-                      className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                      className={`rounded-2xl border p-4 transition ${
+                        isActiveItem
+                          ? "border-blue-200 bg-slate-50/80 shadow-sm"
+                          : "border-slate-200 bg-white/80"
+                      }`}
                     >
-                      <div className="mb-4 flex items-center justify-between">
-                        <h3 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
-                          Item {index + 1}
-                        </h3>
-                        <Button
+                      <div className="flex items-center justify-between gap-3">
+                        <button
                           type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={removeItem(index)}
+                          onClick={() => setActiveItemIndex(index)}
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                          <span
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                              isActiveItem
+                                ? "bg-blue-700 text-white"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {index + 1}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
+                                Item {index + 1}
+                              </span>
+                              {!isActiveItem ? (
+                                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                                  Collapsed
+                                </span>
+                              ) : null}
+                              {itemHasErrors ? (
+                                <span className="rounded-full bg-rose-100 px-2.5 py-1 text-[11px] font-semibold text-rose-700">
+                                  Needs attention
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="mt-1 block truncate text-sm text-slate-700">
+                              {item.item_name || "Untitled item"}
+                              {item.quantity || item.unit
+                                ? ` | ${item.quantity || "0"} ${item.unit || ""}`.trim()
+                                : ""}
+                              {itemCategory?.category_name
+                                ? ` | ${itemCategory.category_name}`
+                                : ""}
+                            </span>
+                            {!isActiveItem ? (
+                              <span className="mt-1 block truncate text-xs text-slate-500">
+                                {itemSubcategory?.subcategory_name ||
+                                  item.specification ||
+                                  "Click to expand and continue editing this item."}
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => setActiveItemIndex(index)}
+                          >
+                            <ChevronDown
+                              className={`h-4 w-4 transition ${
+                                isActiveItem ? "rotate-180" : ""
+                              }`}
+                            />
+                            {isActiveItem ? "Open" : "Edit"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isApprovedSavedEdit && Boolean(item.id)}
+                            title={
+                              isApprovedSavedEdit && item.id
+                                ? "Existing saved items cannot be deleted from an approved update screen."
+                                : ""
+                            }
+                            onClick={removeItem(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
 
+                      {isActiveItem ? (
+                      <div className="mt-4">
                       <div className="grid gap-4 md:grid-cols-3">
                         <Field
                           label="Category"
@@ -1250,6 +1362,8 @@ export default function IndentForm() {
                           </div>
                         </div>
                       </div>
+                      </div>
+                      ) : null}
                     </div>
                     );
                   })}
@@ -1298,21 +1412,27 @@ export default function IndentForm() {
                 </Field>
 
                 <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                    disabled={Boolean(saving)}
-                    onClick={handleSaveDraft}
-                  >
-                    {saving === "draft" ? "Saving Draft..." : "Save Draft"}
-                  </Button>
+                  {!isApprovedSavedEdit ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      disabled={Boolean(saving)}
+                      onClick={handleSaveDraft}
+                    >
+                      {saving === "draft" ? "Saving Draft..." : "Save Draft"}
+                    </Button>
+                  ) : null}
                   <Button
                     type="submit"
                     className="bg-blue-700 text-white hover:bg-blue-800"
                     disabled={Boolean(saving)}
                   >
-                    {saving === "submit" ? "Submitting..." : "Submit Indent"}
+                    {saving === "submit"
+                      ? "Submitting..."
+                      : isApprovedSavedEdit
+                        ? "Apply Approved Update"
+                        : "Submit Indent"}
                   </Button>
                 </div>
               </form>

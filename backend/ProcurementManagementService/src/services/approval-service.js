@@ -11,6 +11,7 @@ const {
 
 const ACTIVE_REQUEST_STATUSES = new Set(["pending", "approved"]);
 const FINAL_REQUEST_STATUSES = new Set(["applied", "rejected", "cancelled"]);
+const INDENT_CHANGE_REQUEST_ROLES = new Set(["INDENT_INITIATOR", "ADMIN", "SUPER_ADMIN"]);
 
 const normalizeRole = (role) =>
   normalizeText(role)?.toUpperCase().replace(/\s+/g, "_") || null;
@@ -184,6 +185,24 @@ class ApprovalService {
 
   async createRequest(payload = {}, actor = {}) {
     const normalized = this.normalizeRequestPayload(payload, actor);
+    if (
+      normalized.module_key === "indents" &&
+      normalized.action_key === "change_saved_record"
+    ) {
+      const actorRoles = normalizeRoles(actor.roles);
+      const canRequestIndentChange = actorRoles.some((role) =>
+        INDENT_CHANGE_REQUEST_ROLES.has(role),
+      );
+
+      if (!canRequestIndentChange) {
+        const error = new Error(
+          "Only Indent Initiator, Admin, or Super Admin can request indent update approval.",
+        );
+        error.statusCode = 403;
+        throw error;
+      }
+    }
+
     return sequelize.transaction(async (transaction) => {
       const workflow = await this.repository.findActiveWorkflow(
         normalized.module_key,
@@ -256,6 +275,16 @@ class ApprovalService {
       where.status = { [Op.in]: Array.from(ACTIVE_REQUEST_STATUSES) };
     }
     return this.repository.listRequests(where);
+  }
+
+  async findApprovedChangeRequest(
+    { id = null, moduleKey, actionKey = "change_saved_record", entityType, entityId },
+    transaction,
+  ) {
+    return this.repository.findApprovedChangeRequest(
+      { id, moduleKey, actionKey, entityType, entityId },
+      transaction,
+    );
   }
 
   ensureRequestCanMove(request) {

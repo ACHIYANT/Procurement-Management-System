@@ -70,6 +70,7 @@ function App() {
             <Route path="/indents/:id" element={<ProtectedRoute moduleKey="indents"><IndentDetail /></ProtectedRoute>} />
             <Route path="/procurement-cases" element={<ProtectedRoute moduleKey="procurementCases"><ProcurementCaseList /></ProtectedRoute>} />
             <Route path="/procurement-cases/new" element={<ProtectedRoute moduleKey="procurementCases" action="create" allowAdminOverride={false}><ProcurementCaseForm /></ProtectedRoute>} />
+            <Route path="/procurement-cases/:id/edit" element={<ProtectedRoute moduleKey="procurementCases"><ProcurementCaseForm /></ProtectedRoute>} />
             <Route path="/procurement-cases/:id" element={<ProtectedRoute moduleKey="procurementCases"><ProcurementCaseDetail /></ProtectedRoute>} />
             <Route path="/tenders" element={<ProtectedRoute moduleKey="tenders"><TenderList /></ProtectedRoute>} />
             <Route path="/tenders/new" element={<ProtectedRoute moduleKey="tenders" action="create"><TenderForm /></ProtectedRoute>} />
@@ -102,6 +103,7 @@ function App() {
             <Route path="/specification-templates" element={<ProtectedRoute moduleKey="specificationTemplates"><ItemSpecificationTemplateMaster /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute moduleKey="reports"><Reports /></ProtectedRoute>} />
             <Route path="/approvals" element={<ProtectedRoute moduleKey="approvals"><ApprovalCenter /></ProtectedRoute>} />
+            <Route path="/approval-requests" element={<ProtectedRoute moduleKey="approvals"><ApprovalCenter requestsOnly /></ProtectedRoute>} />
             <Route path="/administration" element={<ProtectedRoute moduleKey="administration"><Administration /></ProtectedRoute>} />
             <Route path="/administration/procurement-employees/new" element={<ProtectedRoute moduleKey="administration" action="manage"><ProcurementEmployeeForm /></ProtectedRoute>} />
             <Route path="/administration/procurement-employees/:id/edit" element={<ProtectedRoute moduleKey="administration" action="manage"><ProcurementEmployeeForm /></ProtectedRoute>} />
