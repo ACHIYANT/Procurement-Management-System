@@ -2,6 +2,7 @@
 
 const { Op } = require("sequelize");
 const { IndentRepository } = require("../repository/indent-repository");
+const ApprovalService = require("./approval-service");
 const {
   asAmountNumber,
   asId,
@@ -36,6 +37,7 @@ const INDENT_SORT_FIELDS = [
 class IndentService {
   constructor() {
     this.repository = new IndentRepository();
+    this.approvalService = new ApprovalService();
   }
 
   normalizeYesNoBoolean(value) {
@@ -201,6 +203,7 @@ class IndentService {
   normalizeIndentItems(items = []) {
     return (Array.isArray(items) ? items : [])
       .map((item) => ({
+        id: item?.id ? asId(item.id, "Indent item") : null,
         category_id: item?.category_id ? asId(item.category_id, "Category") : null,
         subcategory_id: item?.subcategory_id ? asId(item.subcategory_id, "Subcategory") : null,
         item_name: normalizeText(item?.item_name),
@@ -317,6 +320,49 @@ class IndentService {
       created_by: creatorId,
       updated_by: creatorId,
     };
+  }
+
+  buildItemUpdatePayload(item, updaterId = null) {
+    return {
+      category_id: item.category_id,
+      subcategory_id: item.subcategory_id,
+      item_name: item.item_name || null,
+      quantity: item.quantity,
+      unit: item.unit || null,
+      specification: item.specification,
+      specific_make_required: item.specific_make_required,
+      preferred_make: item.preferred_make,
+      administrative_approval_required: item.administrative_approval_required,
+      remarks: item.remarks,
+      updated_by: updaterId,
+    };
+  }
+
+  async assertApprovedIndentChangeRequest(indentId, payload = {}) {
+    const approvalRequestId = payload.approval_request_id
+      ? asId(payload.approval_request_id, "Approval request")
+      : null;
+
+    if (!approvalRequestId) {
+      const error = new Error("Approved update request is required to edit a submitted indent.");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const request = await this.approvalService.findApprovedChangeRequest({
+      id: approvalRequestId,
+      moduleKey: "indents",
+      entityType: "indent",
+      entityId: indentId,
+    });
+
+    if (!request) {
+      const error = new Error("No approved update request is available for this indent.");
+      error.statusCode = 403;
+      throw error;
+    }
+
+    return request;
   }
 
   decorateIndent(indent) {
@@ -534,13 +580,18 @@ class IndentService {
     const indent = await this.repository.findByPk(asId(id, "Indent id"));
     if (!indent) throw notFound("Indent not found.");
 
-    if (this.getCurrentStatus(indent.status) !== "draft") {
-      const error = new Error("Only draft indents can be edited from this screen.");
-      error.statusCode = 409;
+    const isDraftIndent = this.getCurrentStatus(indent.status) === "draft";
+    const approvedChangeRequest = isDraftIndent
+      ? null
+      : await this.assertApprovedIndentChangeRequest(indent.id, payload);
+
+    const draft = this.isDraftPayload(payload);
+    if (!isDraftIndent && draft) {
+      const error = new Error("Approved saved-record edits must be submitted, not saved as draft.");
+      error.statusCode = 400;
       throw error;
     }
 
-    const draft = this.isDraftPayload(payload);
     const indentPayload = this.buildIndentPayload(payload, { draft });
     const items = this.normalizeIndentItems(payload.items);
     const actorEmpcode = normalizeText(payload.actor_empcode);
@@ -561,26 +612,58 @@ class IndentService {
             transaction,
           ));
 
+      const nextStatus = isDraftIndent
+        ? draft
+          ? "draft"
+          : "received"
+        : indent.status || this.deriveIndentStatus(indent.items);
+
       await this.repository.updateIndent(
         indent,
         {
           system_indent_no: systemIndentNo,
           ...indentPayload,
-          status: draft ? "draft" : "received",
+          status: nextStatus,
           updated_by: actor?.id || null,
         },
         { transaction },
       );
 
-      await this.repository.deleteItemsByIndentId(indent.id, { transaction });
-      const createdItems = items.length
-        ? await this.repository.bulkCreateItems(
-            items.map((item) =>
-              this.buildItemCreatePayload(item, indent.id, actor?.id || null),
-            ),
+      let createdItems = [];
+
+      if (isDraftIndent) {
+        await this.repository.deleteItemsByIndentId(indent.id, { transaction });
+        createdItems = items.length
+          ? await this.repository.bulkCreateItems(
+              items.map((item) =>
+                this.buildItemCreatePayload(item, indent.id, actor?.id || null),
+              ),
+              { transaction },
+            )
+          : [];
+      } else {
+        const existingItems = Array.isArray(indent.items) ? indent.items : [];
+        const existingById = new Map(
+          existingItems.map((item) => [Number(item.id), item]),
+        );
+
+        for (const item of items) {
+          if (item.id && existingById.has(Number(item.id))) {
+            await this.repository.updateIndentItem(
+              existingById.get(Number(item.id)),
+              this.buildItemUpdatePayload(item, actor?.id || null),
+              { transaction },
+            );
+            continue;
+          }
+
+          const [createdItem] = await this.repository.bulkCreateItems(
+            [this.buildItemCreatePayload(item, indent.id, actor?.id || null)],
             { transaction },
-          )
-        : [];
+          );
+          if (createdItem) createdItems.push(createdItem);
+        }
+      }
 
       if (!draft) {
         for (const item of createdItems) {
@@ -589,11 +672,24 @@ class IndentService {
             indent_item_id: item.id,
             event_type: "indent_item_created",
             actor_procurement_employee_id: actor?.id || null,
-            details: `${this.resolveActorLabel({ actorEmployee: actor, actorName, actorEmpcode })} submitted this draft indent item at inward stage.`,
+            details: isDraftIndent
+              ? `${this.resolveActorLabel({ actorEmployee: actor, actorName, actorEmpcode })} submitted this draft indent item at inward stage.`
+              : `${this.resolveActorLabel({ actorEmployee: actor, actorName, actorEmpcode })} added this item through an approved saved-record update.`,
           });
         }
       }
     });
+
+    if (approvedChangeRequest) {
+      await this.approvalService.markApplied(
+        approvedChangeRequest.id,
+        { applied_payload: payload },
+        {
+          employee_id: actor?.id || null,
+          name: this.resolveActorLabel({ actorEmployee: actor, actorName, actorEmpcode }),
+        },
+      );
+    }
 
     return this.getById(indent.id);
   }
