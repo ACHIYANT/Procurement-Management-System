@@ -18,6 +18,11 @@ router.post(
   ensureInternalService,
   UserController.executeActivateFromEmployee,
 );
+router.post(
+  "/internal/users/sync-employee-roles",
+  ensureInternalService,
+  UserController.syncEmployeeRoles,
+);
 router.post("/signin", authSignInRateLimiter, validateUserAuth, UserController.signIn);
 router.post("/signout", UserController.signOut);
 router.get("/csrf-token", UserController.getCsrfToken);
