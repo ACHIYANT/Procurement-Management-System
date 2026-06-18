@@ -1,7 +1,17 @@
-const normalizeRole = (role) => {
-  const normalized = String(role || "")
+const getRoleValue = (role) => {
+  if (role && typeof role === "object") {
+    return role.name || role.role || role.code || role.role_name || role.value || role.label || "";
+  }
+
+  return role;
+};
+
+export const normalizeRole = (role) => {
+  const normalized = String(getRoleValue(role) || "")
     .trim()
-    .toUpperCase();
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_")
+    .replace(/_+/g, "_");
 
   if (normalized === "DEALING_OFFICER") return "PROCUREMENT_OFFICER";
   if (normalized === "PROCUREMENT_ASSISTANT") return "ASSOCIATE";

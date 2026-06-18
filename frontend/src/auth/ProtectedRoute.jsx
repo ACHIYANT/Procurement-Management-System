@@ -1,9 +1,9 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { canAccessFeature, getCurrentUserRoles } from "@/lib/roles";
+import { canAccessFeature, getCurrentUserRoles, normalizeRole } from "@/lib/roles";
 
 const normalizeRoles = (roles) =>
   Array.isArray(roles)
-    ? roles.map((role) => String(role || "").trim().toUpperCase()).filter(Boolean)
+    ? roles.map(normalizeRole).filter(Boolean)
     : [];
 
 const getStoredUser = () => {
