@@ -75,6 +75,7 @@ class UserService {
       new Set(
         rawRoles
           .map((role) => this.normalizeText(role).toUpperCase())
+          .map((role) => role.replace(/[\s-]+/g, "_").replace(/_+/g, "_"))
           .filter(Boolean),
       ),
     );
@@ -223,6 +224,28 @@ class UserService {
       activation_state: "active",
       source_service: this.normalizeText(context?.serviceName) || null,
       user: this.serializeUserIdentity(createdUser),
+    };
+  }
+
+  async syncRolesFromEmployee(data = {}, context = {}) {
+    const payload = this.buildActivationPayload(data);
+    this.validateActivationPayload(payload, { requirePassword: false });
+
+    const syncedUser = await this.userRepository.syncEmployeeRolesByEmpcode({
+      empcode: payload.empcode,
+      fullname: payload.fullname,
+      mobileno: payload.mobileno,
+      designation: payload.designation,
+      division: payload.department,
+      location_scope: payload.location_scope,
+      assigned_roles: payload.assigned_roles,
+    });
+
+    return {
+      action: syncedUser ? "synced" : "not_found",
+      activation_state: syncedUser ? "active" : "not_activated",
+      source_service: this.normalizeText(context?.serviceName) || null,
+      user: this.serializeUserIdentity(syncedUser),
     };
   }
 

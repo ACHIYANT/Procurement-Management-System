@@ -53,6 +53,25 @@ async function callAuthActivationApi(
   credentials = {},
   options = {},
 ) {
+  const normalizedMode = normalizeText(mode).toLowerCase();
+
+  if (!["validate", "execute"].includes(normalizedMode)) {
+    throw buildActivationError({
+      statusCode: 500,
+      code: "AUTH_ACTIVATION_MODE_INVALID",
+      message: "Activation mode is invalid.",
+      hint: "Use a valid activation mode and try again.",
+    });
+  }
+
+  return callAuthInternalApi(
+    `/internal/users/activate-from-employee/${normalizedMode}`,
+    buildActivationPayload(employeePayload, credentials),
+    options,
+  );
+}
+
+async function callAuthInternalApi(pathname = "", payload = {}, options = {}) {
   const baseUrl = normalizeBaseUrl(
     process.env.AUTH_BASE_URL || "http://localhost:3001/api/v1",
   );
@@ -65,16 +84,7 @@ async function callAuthActivationApi(
     normalizeText(options?.serviceName) ||
     normalizeText(process.env.AUTH_INTERNAL_SERVICE_NAME) ||
     "ProcurementManagementService";
-  const normalizedMode = normalizeText(mode).toLowerCase();
-
-  if (!["validate", "execute"].includes(normalizedMode)) {
-    throw buildActivationError({
-      statusCode: 500,
-      code: "AUTH_ACTIVATION_MODE_INVALID",
-      message: "Activation mode is invalid.",
-      hint: "Use a valid activation mode and try again.",
-    });
-  }
+  const normalizedPathname = normalizeText(pathname);
 
   if (!baseUrl) {
     throw buildActivationError({
@@ -98,8 +108,8 @@ async function callAuthActivationApi(
 
   try {
     const response = await axios.post(
-      `${baseUrl}/internal/users/activate-from-employee/${normalizedMode}`,
-      buildActivationPayload(employeePayload, credentials),
+      `${baseUrl}${normalizedPathname.startsWith("/") ? normalizedPathname : `/${normalizedPathname}`}`,
+      payload,
       {
         headers: {
           "x-internal-service-key": sharedSecret,
@@ -115,6 +125,7 @@ async function callAuthActivationApi(
       activation_state:
         normalizeText(response?.data?.data?.activation_state) || null,
       user: response?.data?.data?.user || null,
+      data: response?.data?.data || null,
       requestId:
         normalizeText(response?.headers?.["x-request-id"]) ||
         normalizeText(response?.data?.requestId) ||
@@ -177,8 +188,16 @@ const executeEmployeeActivationInAuthService = (
   options = {},
 ) => callAuthActivationApi("execute", employeePayload, credentials, options);
 
+const syncEmployeeRolesInAuthService = (employeePayload = {}, options = {}) =>
+  callAuthInternalApi(
+    "/internal/users/sync-employee-roles",
+    buildActivationPayload(employeePayload),
+    options,
+  );
+
 module.exports = {
   buildActivationError,
   validateEmployeeActivationInAuthService,
   executeEmployeeActivationInAuthService,
+  syncEmployeeRolesInAuthService,
 };

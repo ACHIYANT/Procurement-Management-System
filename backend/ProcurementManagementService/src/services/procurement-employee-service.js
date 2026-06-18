@@ -1,5 +1,8 @@
 const ProcurementEmployeeRepository = require("../repository/procurement-employee-repository");
 const {
+  syncEmployeeRolesInAuthService,
+} = require("../utils/auth-activation-api");
+const {
   buildCursorResponse,
   isCursorMode,
   normalizeCursor,
@@ -47,7 +50,10 @@ class ProcurementEmployeeService {
       new Set(
         rawRoles
           .map((role) => {
-            const normalizedRole = this.normalizeText(role).toUpperCase();
+            const normalizedRole = this.normalizeText(role)
+              .toUpperCase()
+              .replace(/[\s-]+/g, "_")
+              .replace(/_+/g, "_");
             if (normalizedRole === "DEALING_OFFICER") return "PROCUREMENT_OFFICER";
             if (normalizedRole === "PROCUREMENT_ASSISTANT") return "ASSOCIATE";
             return normalizedRole;
@@ -160,7 +166,26 @@ class ProcurementEmployeeService {
     };
   }
 
-  async create(payload = {}) {
+  async syncAuthRoles(employeePayload = {}, context = {}) {
+    try {
+      const response = await syncEmployeeRolesInAuthService(employeePayload, {
+        requestId: context?.requestId || null,
+      });
+
+      return {
+        status: response?.action === "synced" ? "synced" : "not_activated",
+        roles: Array.isArray(response?.user?.roles) ? response.user.roles : [],
+      };
+    } catch (error) {
+      return {
+        status: "failed",
+        message: error?.message || "Unable to sync Auth roles.",
+        code: error?.code || "AUTH_ROLE_SYNC_FAILED",
+      };
+    }
+  }
+
+  async create(payload = {}, context = {}) {
     const normalizedPayload = this.validateCreatePayload(payload);
     const existing = await this.repository.getByEmpcode(normalizedPayload.empcode);
     if (existing) {
@@ -170,7 +195,11 @@ class ProcurementEmployeeService {
     }
 
     const employee = await this.repository.create(normalizedPayload);
-    return this.serialize(employee);
+    const serializedEmployee = this.serialize(employee);
+    return {
+      ...serializedEmployee,
+      auth_sync: await this.syncAuthRoles(serializedEmployee, context),
+    };
   }
 
   async list(query = {}) {
@@ -221,7 +250,7 @@ class ProcurementEmployeeService {
     return this.serialize(employee);
   }
 
-  async update(id, payload = {}) {
+  async update(id, payload = {}, context = {}) {
     const employee = await this.repository.getById(Number(id));
     if (!employee) {
       const error = new Error("Procurement employee not found.");
@@ -281,7 +310,11 @@ class ProcurementEmployeeService {
     }
 
     const updatedEmployee = await this.repository.update(employee, normalizedPayload);
-    return this.serialize(updatedEmployee);
+    const serializedEmployee = this.serialize(updatedEmployee);
+    return {
+      ...serializedEmployee,
+      auth_sync: await this.syncAuthRoles(serializedEmployee, context),
+    };
   }
 
   async validateActivationIdentity(payload = {}) {

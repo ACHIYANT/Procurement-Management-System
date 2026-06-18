@@ -42,7 +42,9 @@ const getById = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const data = await service.create(req.body || {});
+    const data = await service.create(req.body || {}, {
+      requestId: req.requestId || null,
+    });
     return res.status(201).json({
       success: true,
       message: "Procurement employee created successfully.",
@@ -61,7 +63,9 @@ const create = async (req, res) => {
 
 const update = async (req, res) => {
   try {
-    const data = await service.update(req.params.id, req.body || {});
+    const data = await service.update(req.params.id, req.body || {}, {
+      requestId: req.requestId || null,
+    });
     return res.status(200).json({
       success: true,
       message: "Procurement employee updated successfully.",

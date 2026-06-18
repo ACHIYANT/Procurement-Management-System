@@ -5,7 +5,57 @@ const { User, Role, sequelize } = require("../../models");
 
 const DEFAULT_ROLE_NAME = "USER";
 
+const normalizeRoleName = (roleName) => {
+  const normalized = String(roleName || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_")
+    .replace(/_+/g, "_");
+
+  if (normalized === "DEALING_OFFICER") return "PROCUREMENT_OFFICER";
+  if (normalized === "PROCUREMENT_ASSISTANT") return "ASSOCIATE";
+  return normalized;
+};
+
+const normalizeRoleList = (roleNames = []) =>
+  Array.from(
+    new Set(
+      (Array.isArray(roleNames) ? roleNames : [])
+        .map(normalizeRoleName)
+        .filter(Boolean),
+    ),
+  );
+
 class UserRepository {
+  async ensureRoles(roleNames = [], transaction) {
+    const requestedRoles = normalizeRoleList(roleNames);
+    if (!requestedRoles.length) return [];
+
+    const existingRoles = await Role.findAll({
+      where: { name: requestedRoles },
+      transaction,
+    });
+    const existingRoleNames = new Set(existingRoles.map((role) => role.name));
+    const missingRoles = requestedRoles.filter((roleName) => !existingRoleNames.has(roleName));
+
+    if (missingRoles.length) {
+      const now = new Date();
+      await Role.bulkCreate(
+        missingRoles.map((roleName) => ({
+          name: roleName,
+          createdAt: now,
+          updatedAt: now,
+        })),
+        { transaction, ignoreDuplicates: true },
+      );
+    }
+
+    return Role.findAll({
+      where: { name: requestedRoles },
+      transaction,
+    });
+  }
+
   async getByEmpcode(empcode) {
     return User.findOne({
       where: { empcode: String(empcode || "").trim() },
@@ -85,25 +135,77 @@ class UserRepository {
   }
 
   async create(payload, options = {}) {
-    return sequelize.transaction(async (transaction) => {
+    const userId = await sequelize.transaction(async (transaction) => {
       const user = await User.create(payload, { transaction });
       const requestedRoles = Array.from(
         new Set(
           [DEFAULT_ROLE_NAME]
             .concat(Array.isArray(options.roleNames) ? options.roleNames : [])
-            .map((roleName) => String(roleName || "").trim().toUpperCase())
+            .map(normalizeRoleName)
             .filter(Boolean),
         ),
       );
-      const assignableRoles = await Role.findAll({
-        where: { name: requestedRoles },
-        transaction,
-      });
+      const assignableRoles = await this.ensureRoles(requestedRoles, transaction);
       if (assignableRoles.length) {
         await user.addRoles(assignableRoles, { transaction });
       }
-      return this.getById(user.id);
+      return user.id;
     });
+
+    return this.getById(userId);
+  }
+
+  async syncEmployeeRolesByEmpcode(payload = {}) {
+    const empcode = String(payload.empcode || "").trim();
+    if (!empcode) {
+      const error = new Error("Employee code is required for role sync.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const userId = await sequelize.transaction(async (transaction) => {
+      const user = await User.findOne({
+        where: { empcode },
+        transaction,
+      });
+
+      if (!user) return null;
+
+      const updatePayload = {};
+      if (String(payload.fullname || "").trim()) {
+        updatePayload.fullname = String(payload.fullname).trim().replace(/\s+/g, " ");
+      }
+      if (String(payload.mobileno || "").trim()) {
+        updatePayload.mobileno = String(payload.mobileno).replace(/\D/g, "").trim();
+      }
+      if (String(payload.designation || "").trim()) {
+        updatePayload.designation = String(payload.designation).trim().replace(/\s+/g, " ");
+      }
+      if (String(payload.department || payload.division || "").trim()) {
+        updatePayload.department = String(payload.department || payload.division)
+          .trim()
+          .replace(/\s+/g, " ");
+      }
+      if (String(payload.location_scope || "").trim()) {
+        updatePayload.location_scope = String(payload.location_scope)
+          .trim()
+          .replace(/\s+/g, " ")
+          .toUpperCase();
+      }
+
+      if (Object.keys(updatePayload).length) {
+        await user.update(updatePayload, { transaction });
+      }
+
+      const assignedRoles = normalizeRoleList(payload.assigned_roles);
+      const targetRoles = normalizeRoleList([DEFAULT_ROLE_NAME, ...assignedRoles]);
+      const assignableRoles = await this.ensureRoles(targetRoles, transaction);
+      await user.setRoles(assignableRoles, { transaction });
+
+      return user.id;
+    });
+
+    return userId ? this.getById(userId) : null;
   }
 }
 

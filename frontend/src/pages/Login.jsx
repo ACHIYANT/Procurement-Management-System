@@ -7,11 +7,12 @@ import PopupMessage from "@/components/PopupMessage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { toAuthApiUrl } from "@/lib/api-config";
+import { toAuthApiUrl, toProcurementApiUrl } from "@/lib/api-config";
 import {
   buildDiagnosticPresentation,
   buildDisplayMessage,
 } from "@/lib/network";
+import { normalizeRole } from "@/lib/roles";
 
 import logo from "/logo.svg";
 import govt from "/govt.svg";
@@ -35,6 +36,31 @@ const parseApiFeedback = async (response, fallbackMessage) => {
       message: fallbackMessage,
       diagnostic: null,
     };
+  }
+};
+
+const uniqueNormalizedRoles = (roles = []) =>
+  Array.from(new Set((Array.isArray(roles) ? roles : []).map(normalizeRole).filter(Boolean)));
+
+const fetchProcurementEmployeeRoles = async ({ empcode, mobileno } = {}) => {
+  if (!String(empcode || "").trim() || !String(mobileno || "").trim()) return [];
+
+  try {
+    const response = await fetch(toProcurementApiUrl("/procurement-employees/activation/validate"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({ empcode, mobileno }),
+    });
+
+    if (!response.ok) return [];
+
+    const payload = await response.json();
+    return uniqueNormalizedRoles(payload?.data?.employee?.assigned_roles || []);
+  } catch {
+    return [];
   }
 };
 
@@ -99,7 +125,12 @@ export default function Login() {
       const data = await response.json();
 
       if (data.success && data.data) {
-        const roles = Array.isArray(data?.data?.roles) ? data.data.roles : [];
+        const authRoles = Array.isArray(data?.data?.roles) ? data.data.roles : [];
+        const employeeRoles = await fetchProcurementEmployeeRoles({
+          empcode: data.data.empcode,
+          mobileno: data.data.mobileno,
+        });
+        const roles = uniqueNormalizedRoles([...authRoles, ...employeeRoles]);
 
         localStorage.setItem("fullname", data.data.fullName || "");
         localStorage.setItem("roles", JSON.stringify(roles));
