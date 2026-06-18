@@ -138,6 +138,30 @@ const executeActivateFromEmployee = async (req, res) => {
   }
 };
 
+const syncEmployeeRoles = async (req, res) => {
+  try {
+    const response = await userService.syncRolesFromEmployee(req.body || {}, {
+      serviceName: req.internalService?.serviceName || null,
+    });
+    return res.status(200).json(
+      buildSuccessPayload(req, res, response, {
+        statusCode: 200,
+        message:
+          response?.action === "synced"
+            ? "User roles synced from employee successfully."
+            : "No active Auth account found for this employee.",
+      }),
+    );
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 500,
+      code: "EMPLOYEE_ROLE_SYNC_FAILED",
+      message: "Unable to sync user roles from employee.",
+      hint: "Please try again in a moment.",
+    });
+  }
+};
+
 module.exports = {
   signIn,
   signOut,
@@ -145,4 +169,5 @@ module.exports = {
   isAuthenticated,
   validateActivateFromEmployee,
   executeActivateFromEmployee,
+  syncEmployeeRoles,
 };
