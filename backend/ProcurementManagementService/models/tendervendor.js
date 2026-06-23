@@ -95,6 +95,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DECIMAL(15, 2),
         allowNull: true,
       },
+      commercial_bid_document_path: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
       loa_allocation_basis: {
         type: DataTypes.STRING(40),
         allowNull: true,

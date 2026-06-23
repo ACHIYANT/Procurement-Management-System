@@ -169,6 +169,14 @@ const normalizeCommercialItemQuotes = (payloadQuotes = []) =>
       quote?.negotiated_amount === "" || quote?.negotiated_amount == null
         ? null
         : normalizeAmount(quote.negotiated_amount);
+    const preRaAmount =
+      quote?.pre_ra_amount === "" || quote?.pre_ra_amount == null
+        ? null
+        : normalizeAmount(quote.pre_ra_amount);
+    const postRaAmount =
+      quote?.post_ra_amount === "" || quote?.post_ra_amount == null
+        ? null
+        : normalizeAmount(quote.post_ra_amount);
     const loaAllocatedQuantity =
       quote?.loa_allocated_quantity === "" ||
       quote?.loa_allocated_quantity == null
@@ -183,6 +191,8 @@ const normalizeCommercialItemQuotes = (payloadQuotes = []) =>
       tender_item_id: tenderItemId,
       quoted_amount: quotedAmount,
       negotiated_amount: negotiatedAmount,
+      pre_ra_amount: preRaAmount,
+      post_ra_amount: postRaAmount,
       loa_allocated_quantity: loaAllocatedQuantity,
       loa_allocated_amount: loaAllocatedAmount,
       make: normalizeNullableText(quote?.make),
@@ -505,6 +515,64 @@ class TenderService {
     return decorated;
   }
 
+  async update(id, payload = {}) {
+    const tender = await this.repository.findByPk(asId(id, "Tender id"));
+    if (!tender) throw notFound("Tender not found.");
+
+    const update = {};
+    if ("price_bid_valid_upto" in payload) {
+      update.price_bid_valid_upto = normalizeNullableDate(payload.price_bid_valid_upto);
+    }
+    if ("technical_bid_validity_applicable" in payload) {
+      update.technical_bid_validity_applicable = Boolean(
+        payload.technical_bid_validity_applicable,
+      );
+      update.technical_bid_valid_upto = update.technical_bid_validity_applicable
+        ? normalizeNullableDate(payload.technical_bid_valid_upto)
+        : null;
+    } else if ("technical_bid_valid_upto" in payload) {
+      update.technical_bid_valid_upto = normalizeNullableDate(
+        payload.technical_bid_valid_upto,
+      );
+      update.technical_bid_validity_applicable = Boolean(
+        update.technical_bid_valid_upto,
+      );
+    }
+
+    if ("portal_ra_no" in payload) {
+      update.portal_ra_no = GEM_TENDER_MODES.has(tender.portal_type)
+        ? normalizeNullableText(payload.portal_ra_no)
+        : null;
+    }
+    if ("ra_start_at" in payload) {
+      update.ra_start_at = GEM_TENDER_MODES.has(tender.portal_type)
+        ? (payload.ra_start_at ? normalizeDateTime(payload.ra_start_at) : null)
+        : null;
+    }
+    if ("ra_end_at" in payload) {
+      update.ra_end_at = GEM_TENDER_MODES.has(tender.portal_type)
+        ? (payload.ra_end_at ? normalizeDateTime(payload.ra_end_at) : null)
+        : null;
+    }
+    if ("ra_remarks" in payload) {
+      update.ra_remarks = GEM_TENDER_MODES.has(tender.portal_type)
+        ? normalizeNullableText(payload.ra_remarks)
+        : null;
+    }
+
+    const nextRaStart = update.ra_start_at || tender.ra_start_at;
+    const nextRaEnd = update.ra_end_at || tender.ra_end_at;
+    if (nextRaStart && nextRaEnd && new Date(nextRaEnd) < new Date(nextRaStart)) {
+      const error = new Error("RA end date/time cannot be before RA start date/time.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (!Object.keys(update).length) return this.getById(tender.id);
+    await this.repository.updateTender(tender, update);
+    return this.getById(tender.id);
+  }
+
   async updatePbgSetup(tenderId, payload = {}) {
     const tender = await this.repository.findByPk(asId(tenderId, "Tender id"));
     if (!tender) throw notFound("Tender not found.");
@@ -632,10 +700,26 @@ class TenderService {
           tender_title: requireValue(payload, "tender_title", "Tender title"),
           portal_bid_no: tenderIdentifiers.portal_bid_no,
           portal_ra_no: tenderIdentifiers.portal_ra_no,
+          ra_start_at: GEM_TENDER_MODES.has(portalType)
+            ? (payload.ra_start_at ? normalizeDateTime(payload.ra_start_at) : null)
+            : null,
+          ra_end_at: GEM_TENDER_MODES.has(portalType)
+            ? (payload.ra_end_at ? normalizeDateTime(payload.ra_end_at) : null)
+            : null,
+          ra_remarks: GEM_TENDER_MODES.has(portalType)
+            ? normalizeNullableText(payload.ra_remarks)
+            : null,
           portal_tender_id: tenderIdentifiers.portal_tender_id,
           leg_label: normalizeNullableText(payload.leg_label),
           allocation_quantity: allocationQuantity,
           tender_value: normalizeAmount(payload.tender_value),
+          price_bid_valid_upto: normalizeNullableDate(payload.price_bid_valid_upto),
+          technical_bid_validity_applicable: Boolean(
+            payload.technical_bid_validity_applicable,
+          ),
+          technical_bid_valid_upto: payload.technical_bid_validity_applicable
+            ? normalizeNullableDate(payload.technical_bid_valid_upto)
+            : null,
           emd_exemption_policy: normalizeText(payload.emd_exemption_policy) || "none",
           emd_amount: normalizeAmount(payload.emd_amount),
           tender_fee_amount: normalizeAmount(payload.tender_fee_amount),
@@ -782,6 +866,9 @@ class TenderService {
           is_l1: Boolean(payload.is_l1),
           final_quoted_amount: normalizeAmount(payload.final_quoted_amount),
           negotiated_amount: normalizeAmount(payload.negotiated_amount),
+          commercial_bid_document_path: normalizeNullableText(
+            payload.commercial_bid_document_path,
+          ),
           loa_allocation_basis: normalizeNullableText(payload.loa_allocation_basis),
           loa_allocated_quantity: normalizeAmount(payload.loa_allocated_quantity),
           loa_allocated_amount: normalizeAmount(payload.loa_allocated_amount),
@@ -938,6 +1025,8 @@ class TenderService {
         (quote) =>
           asAmountNumber(quote.quoted_amount) > 0 ||
           asAmountNumber(quote.negotiated_amount) > 0 ||
+          asAmountNumber(quote.pre_ra_amount) > 0 ||
+          asAmountNumber(quote.post_ra_amount) > 0 ||
           asAmountNumber(quote.loa_allocated_quantity) > 0 ||
           asAmountNumber(quote.loa_allocated_amount) > 0 ||
           Boolean(normalizeNullableText(quote.make)) ||
@@ -1099,6 +1188,11 @@ class TenderService {
       update.final_quoted_amount = normalizeAmount(payload.final_quoted_amount);
     }
     if ("negotiated_amount" in payload) update.negotiated_amount = normalizeAmount(payload.negotiated_amount);
+    if ("commercial_bid_document_path" in payload) {
+      update.commercial_bid_document_path = normalizeNullableText(
+        payload.commercial_bid_document_path,
+      );
+    }
     if ("is_l1" in payload) update.is_l1 = Boolean(payload.is_l1);
     if ("loa_allocation_basis" in payload) {
       const nextAllocationBasis = normalizeNullableText(payload.loa_allocation_basis);
@@ -1217,6 +1311,8 @@ class TenderService {
             tender_item_id: quote.tender_item_id,
             quoted_amount: quote.quoted_amount,
             negotiated_amount: quote.negotiated_amount,
+            pre_ra_amount: quote.pre_ra_amount,
+            post_ra_amount: quote.post_ra_amount,
             loa_allocated_quantity: quote.loa_allocated_quantity,
             loa_allocated_amount: quote.loa_allocated_amount,
             make: quote.make,

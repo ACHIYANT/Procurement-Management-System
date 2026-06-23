@@ -91,6 +91,18 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(100),
         allowNull: true,
       },
+      ra_start_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      ra_end_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      ra_remarks: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       portal_tender_id: {
         type: DataTypes.STRING(100),
         allowNull: true,
@@ -105,6 +117,19 @@ module.exports = (sequelize, DataTypes) => {
       },
       tender_value: {
         type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+      },
+      price_bid_valid_upto: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+      },
+      technical_bid_validity_applicable: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      technical_bid_valid_upto: {
+        type: DataTypes.DATEONLY,
         allowNull: true,
       },
       loa_allocation_scope: {

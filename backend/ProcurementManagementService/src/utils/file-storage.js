@@ -70,6 +70,7 @@ const FILE_SCOPE_MAP = {
   committee_agenda_document: "committee-agenda-documents",
   committee_attendance_document: "committee-attendance-documents",
   committee_proceedings_document: "committee-proceedings-documents",
+  commercial_bid_document: "commercial-bid-documents",
   delivery_challans: "delivery-challans",
   department_fund_noting: "department-fund-notings",
   department_payment_noting: "department-payment-notings",

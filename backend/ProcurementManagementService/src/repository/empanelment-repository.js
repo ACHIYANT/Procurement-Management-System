@@ -52,6 +52,17 @@ class EmpanelmentRepository {
     return Firm.findByPk(id);
   }
 
+  async findByEmpanelmentNo(empanelmentNo) {
+    const normalizedNo = String(empanelmentNo || "").trim().replace(/\s+/g, " ").toLowerCase();
+    if (!normalizedNo) return null;
+    return Empanelment.findOne({
+      where: sequelize.where(
+        sequelize.fn("LOWER", sequelize.fn("TRIM", sequelize.col("empanelment_no"))),
+        normalizedNo,
+      ),
+    });
+  }
+
   async findCategoriesByEmpanelmentIds(empanelmentIds = []) {
     return EmpanelmentItemCategory.findAll({
       where: { empanelment_id: { [Op.in]: empanelmentIds } },

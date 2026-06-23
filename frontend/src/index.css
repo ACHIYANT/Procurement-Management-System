@@ -84,3 +84,851 @@
 .sidebar-scroll-hidden::-webkit-scrollbar {
   display: none;
 }
+
+.pms-brand-header {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.pms-brand-identity {
+  width: fit-content;
+}
+
+.pms-brand-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.85rem;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.pms-brand-mark img {
+  display: block;
+  transition:
+    filter 180ms ease,
+    opacity 180ms ease;
+}
+
+.pms-govt-emblem-frame {
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 2.42rem;
+  width: 2.42rem;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.pms-govt-logo {
+  height: 2.42rem !important;
+  width: 13.3rem !important;
+  max-width: none !important;
+  object-fit: cover;
+  object-position: left center;
+}
+
+.pms-govt-wordmark {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  color: #172033;
+  font-size: 0.72rem;
+  font-weight: 760;
+  letter-spacing: -0.012em;
+  line-height: 1.08;
+  text-shadow: 0 0.04rem 0.08rem rgba(255, 255, 255, 0.62);
+  white-space: nowrap;
+}
+
+.pms-govt-wordmark span:last-child {
+  margin-top: 0.08rem;
+  color: rgba(23, 32, 51, 0.76);
+  font-size: 0.56rem;
+  font-weight: 680;
+  letter-spacing: 0.006em;
+}
+
+.pms-brand-divider {
+  border-color: rgb(226, 232, 240);
+}
+
+* {
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 0.72rem;
+  height: 0.72rem;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 3rem;
+  border: 0.18rem solid transparent;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 30% 18%, rgba(255, 255, 255, 0.72), transparent 1.15rem),
+    linear-gradient(135deg, rgba(0, 113, 227, 0.96) 0%, rgba(41, 151, 255, 0.92) 46%, rgba(52, 199, 89, 0.78) 100%)
+    border-box;
+  background-clip: padding-box;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 0 18px rgba(41, 151, 255, 0.2);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background:
+    radial-gradient(circle at 30% 18%, rgba(255, 255, 255, 0.86), transparent 1.15rem),
+    linear-gradient(135deg, rgba(0, 113, 227, 1) 0%, rgba(10, 132, 255, 0.96) 44%, rgba(52, 199, 89, 0.9) 100%)
+    border-box;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.pms-fancy-scrollbar,
+.pms-fancy-scrollbar [class*="overflow-auto"],
+.pms-fancy-scrollbar [class*="overflow-y-auto"],
+.pms-fancy-scrollbar [class*="overflow-x-auto"] {
+  scrollbar-width: auto;
+  scrollbar-color: rgba(125, 181, 255, 0.58) rgba(226, 232, 240, 0.24);
+}
+
+.pms-fancy-scrollbar::-webkit-scrollbar,
+.pms-fancy-scrollbar [class*="overflow-auto"]::-webkit-scrollbar,
+.pms-fancy-scrollbar [class*="overflow-y-auto"]::-webkit-scrollbar,
+.pms-fancy-scrollbar [class*="overflow-x-auto"]::-webkit-scrollbar {
+  width: 0.92rem !important;
+  height: 0.92rem !important;
+}
+
+.pms-fancy-scrollbar::-webkit-scrollbar-track,
+.pms-fancy-scrollbar [class*="overflow-auto"]::-webkit-scrollbar-track,
+.pms-fancy-scrollbar [class*="overflow-y-auto"]::-webkit-scrollbar-track,
+.pms-fancy-scrollbar [class*="overflow-x-auto"]::-webkit-scrollbar-track {
+  border-radius: 999px !important;
+  background:
+    linear-gradient(180deg, rgba(248, 251, 255, 0.72), rgba(226, 232, 240, 0.34)) !important;
+}
+
+.pms-fancy-scrollbar::-webkit-scrollbar-thumb,
+.pms-fancy-scrollbar [class*="overflow-auto"]::-webkit-scrollbar-thumb,
+.pms-fancy-scrollbar [class*="overflow-y-auto"]::-webkit-scrollbar-thumb,
+.pms-fancy-scrollbar [class*="overflow-x-auto"]::-webkit-scrollbar-thumb {
+  min-height: 3.2rem !important;
+  border: 0.28rem solid transparent !important;
+  border-radius: 999px !important;
+  background-color: #8ec5ff !important;
+  background:
+    linear-gradient(180deg, rgba(183, 220, 255, 0.78) 0%, rgba(125, 181, 255, 0.68) 52%, rgba(170, 238, 224, 0.62) 100%) padding-box !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+    0 0 12px rgba(41, 151, 255, 0.1) !important;
+}
+
+.pms-fancy-scrollbar::-webkit-scrollbar-thumb:hover,
+.pms-fancy-scrollbar [class*="overflow-auto"]::-webkit-scrollbar-thumb:hover,
+.pms-fancy-scrollbar [class*="overflow-y-auto"]::-webkit-scrollbar-thumb:hover,
+.pms-fancy-scrollbar [class*="overflow-x-auto"]::-webkit-scrollbar-thumb:hover {
+  background-color: #7db5ff !important;
+  background:
+    linear-gradient(180deg, rgba(152, 205, 255, 0.86) 0%, rgba(91, 159, 246, 0.76) 52%, rgba(130, 226, 205, 0.72) 100%) padding-box !important;
+}
+
+html.pms-dark {
+  color-scheme: dark;
+  --background: oklch(0.12 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.18 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.18 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.68 0.18 252);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.24 0 0);
+  --secondary-foreground: oklch(0.94 0 0);
+  --muted: oklch(0.24 0 0);
+  --muted-foreground: oklch(0.74 0 0);
+  --accent: oklch(0.28 0 0);
+  --accent-foreground: oklch(0.96 0 0);
+  --border: oklch(0.33 0 0);
+  --input: oklch(0.33 0 0);
+  --ring: oklch(0.72 0.16 252);
+}
+
+html.pms-dark body,
+html.pms-dark #root {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(0, 113, 227, 0.18), transparent 28rem),
+    radial-gradient(circle at 88% 12%, rgba(251, 191, 36, 0.08), transparent 22rem),
+    linear-gradient(180deg, #050506 0%, #0b0b0f 48%, #050506 100%);
+  color: #f5f5f7;
+}
+
+html.pms-dark ::selection {
+  background: rgba(41, 151, 255, 0.34);
+  color: #ffffff;
+}
+
+html.pms-dark *::-webkit-scrollbar-thumb {
+  background:
+    radial-gradient(circle at 30% 18%, rgba(255, 255, 255, 0.5), transparent 1.1rem),
+    linear-gradient(135deg, rgba(255, 214, 10, 0.94) 0%, rgba(251, 191, 36, 0.82) 42%, rgba(48, 209, 88, 0.72) 100%)
+    border-box;
+  background-clip: padding-box;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 0 20px rgba(251, 191, 36, 0.24);
+}
+
+html.pms-dark *::-webkit-scrollbar-thumb:hover {
+  background:
+    radial-gradient(circle at 30% 18%, rgba(255, 255, 255, 0.62), transparent 1.1rem),
+    linear-gradient(135deg, rgba(255, 214, 10, 1) 0%, rgba(251, 191, 36, 0.92) 42%, rgba(48, 209, 88, 0.84) 100%)
+    border-box;
+  background-clip: padding-box;
+}
+
+html.pms-dark .pms-fancy-scrollbar,
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-auto"],
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-y-auto"],
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-x-auto"] {
+  scrollbar-color: rgba(245, 196, 92, 0.62) rgba(255, 255, 255, 0.08);
+}
+
+html.pms-dark .pms-fancy-scrollbar::-webkit-scrollbar-track,
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-auto"]::-webkit-scrollbar-track,
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-y-auto"]::-webkit-scrollbar-track,
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-x-auto"]::-webkit-scrollbar-track {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.045)) !important;
+}
+
+html.pms-dark .pms-fancy-scrollbar::-webkit-scrollbar-thumb,
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-auto"]::-webkit-scrollbar-thumb,
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-y-auto"]::-webkit-scrollbar-thumb,
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-x-auto"]::-webkit-scrollbar-thumb {
+  background-color: #fbbf24 !important;
+  background:
+    linear-gradient(180deg, rgba(245, 196, 92, 0.76) 0%, rgba(230, 159, 44, 0.62) 48%, rgba(98, 210, 132, 0.58) 100%) padding-box !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 0 14px rgba(251, 191, 36, 0.16) !important;
+}
+
+html.pms-dark .pms-fancy-scrollbar::-webkit-scrollbar-thumb:hover,
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-auto"]::-webkit-scrollbar-thumb:hover,
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-y-auto"]::-webkit-scrollbar-thumb:hover,
+html.pms-dark .pms-fancy-scrollbar [class*="overflow-x-auto"]::-webkit-scrollbar-thumb:hover {
+  background-color: #ffd60a !important;
+  background:
+    linear-gradient(180deg, rgba(255, 214, 120, 0.84) 0%, rgba(245, 180, 66, 0.7) 48%, rgba(105, 224, 145, 0.68) 100%) padding-box !important;
+}
+
+html.pms-dark [class*="bg-[#f5f5f7]"],
+html.pms-dark [class*="bg-[#fbfbfd]"],
+html.pms-dark [class*="bg-[#f8f8fa]"],
+html.pms-dark [class*="bg-[#f8fbff]"],
+html.pms-dark [class*="bg-[#f8fafd]"],
+html.pms-dark [class*="bg-[#fbfcff]"],
+html.pms-dark [class*="bg-[#fbfaf8]"],
+html.pms-dark [class*="bg-[#fffaf4]"],
+html.pms-dark [class*="bg-[#f7fbff]"],
+html.pms-dark [class*="bg-[#f6fbf7]"],
+html.pms-dark [class*="bg-[#fff6f6]"],
+html.pms-dark [class*="bg-[#fffaf2]"],
+html.pms-dark [class*="bg-[#eef6ff]"],
+html.pms-dark [class*="bg-[#fbfbfc]"],
+html.pms-dark [class*="bg-[#dfe5ee]"],
+html.pms-dark [class*="bg-slate-50"],
+html.pms-dark [class*="bg-slate-100"] {
+  background-color: rgba(18, 18, 22, 0.86) !important;
+}
+
+html.pms-dark [class*="bg-blue-50"],
+html.pms-dark [class*="bg-sky-50"],
+html.pms-dark [class*="bg-sky-100"] {
+  background-color: rgba(10, 132, 255, 0.15) !important;
+  color: #9dccff !important;
+}
+
+html.pms-dark [class*="bg-emerald-50"],
+html.pms-dark [class*="bg-emerald-100"],
+html.pms-dark [class*="bg-emerald-200"] {
+  background-color: rgba(52, 199, 89, 0.16) !important;
+  color: #9ff0b8 !important;
+}
+
+html.pms-dark [class*="bg-rose-50"],
+html.pms-dark [class*="bg-rose-100"],
+html.pms-dark [class*="bg-rose-200"] {
+  background-color: rgba(255, 69, 58, 0.16) !important;
+  color: #ffb4ad !important;
+}
+
+html.pms-dark [class*="bg-amber-50"],
+html.pms-dark [class*="bg-amber-100"],
+html.pms-dark [class*="bg-amber-200"],
+html.pms-dark [class*="bg-orange-50"],
+html.pms-dark [class*="bg-orange-100"] {
+  background-color: rgba(255, 214, 10, 0.14) !important;
+  color: #ffe58a !important;
+}
+
+html.pms-dark [class*="bg-white"],
+html.pms-dark [class*="bg-card"] {
+  background-color: rgba(28, 28, 32, 0.82) !important;
+}
+
+html.pms-dark .pms-brand-header {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(41, 151, 255, 0.12), transparent 24rem),
+    linear-gradient(180deg, rgba(24, 24, 28, 0.98), rgba(15, 15, 18, 0.96)) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 255, 0.055),
+    0 18px 48px -42px rgba(0, 0, 0, 0.9) !important;
+  color: #f5f5f7 !important;
+}
+
+html.pms-dark .pms-brand-header .pms-brand-identity {
+  max-width: min(58vw, 25rem);
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0;
+  box-shadow: none !important;
+}
+
+html.pms-dark .pms-brand-header .pms-brand-mark,
+html.pms-dark .pms-brand-header .pms-brand-mark:hover {
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html.pms-dark .pms-brand-header .pms-brand-mark img {
+  opacity: 0.98 !important;
+}
+
+html.pms-dark .pms-brand-header .pms-brand-mark-hartron img {
+  filter:
+    brightness(0)
+    saturate(100%)
+    invert(69%)
+    sepia(74%)
+    saturate(1097%)
+    hue-rotate(173deg)
+    brightness(105%)
+    contrast(101%)
+    drop-shadow(0 0 0.36rem rgba(100, 210, 255, 0.24))
+    drop-shadow(0 0.65rem 1.1rem rgba(10, 132, 255, 0.18)) !important;
+}
+
+html.pms-dark .pms-brand-header .pms-brand-mark-govt img {
+  filter:
+    brightness(0)
+    invert(1)
+    contrast(1.12)
+    drop-shadow(0 0 0.22rem rgba(255, 255, 255, 0.1)) !important;
+}
+
+.pms-brand-header .pms-brand-mark-govt {
+  gap: 0.55rem;
+}
+
+html.pms-dark .pms-brand-header .pms-govt-wordmark {
+  color: rgba(255, 255, 255, 0.96);
+  text-shadow: 0 0.08rem 0.25rem rgba(0, 0, 0, 0.35);
+}
+
+html.pms-dark .pms-brand-header .pms-govt-wordmark span:last-child {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+html.pms-dark .pms-brand-header .pms-brand-divider {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+html.pms-dark .pms-brand-header .pms-brand-user-menu {
+  background: rgba(255, 255, 255, 0.065) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+html.pms-dark .pms-brand-header .pms-brand-user-name {
+  color: rgba(245, 245, 247, 0.76) !important;
+}
+
+html.pms-dark .pms-brand-header .pms-brand-signout {
+  color: rgba(245, 245, 247, 0.82) !important;
+}
+
+html.pms-dark .pms-brand-header .pms-brand-signout:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #ffffff !important;
+}
+
+html.pms-dark [class*="from-white"],
+html.pms-dark [class*="from-slate-50"],
+html.pms-dark [class*="from-rose-50"],
+html.pms-dark [class*="from-amber-50"],
+html.pms-dark [class*="from-emerald-50"],
+html.pms-dark [class*="from-sky-50"],
+html.pms-dark [class*="from-blue-50"] {
+  --tw-gradient-from: rgba(31, 31, 36, 0.96) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(31, 31, 36, 0) var(--tw-gradient-to-position) !important;
+}
+
+html.pms-dark [class*="via-white"],
+html.pms-dark [class*="via-slate-50"],
+html.pms-dark [class*="via-rose-100"],
+html.pms-dark [class*="via-amber-100"],
+html.pms-dark [class*="via-emerald-100"],
+html.pms-dark [class*="via-sky-100"] {
+  --tw-gradient-via: rgba(24, 24, 29, 0.96) var(--tw-gradient-via-position) !important;
+  --tw-gradient-to: rgba(24, 24, 29, 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important;
+}
+
+html.pms-dark [class*="to-white"],
+html.pms-dark [class*="to-slate-50"],
+html.pms-dark [class*="to-rose-50"],
+html.pms-dark [class*="to-amber-50"],
+html.pms-dark [class*="to-emerald-50"],
+html.pms-dark [class*="to-orange-50"],
+html.pms-dark [class*="to-sky-50"],
+html.pms-dark [class*="to-blue-50"] {
+  --tw-gradient-to: rgba(18, 18, 23, 0.96) var(--tw-gradient-to-position) !important;
+}
+
+html.pms-dark [class*="bg-[linear-gradient"],
+html.pms-dark [class*="bg-[radial-gradient"] {
+  background:
+    radial-gradient(circle at top left, rgba(41, 151, 255, 0.18), transparent 34%),
+    linear-gradient(135deg, rgba(30, 30, 35, 0.94), rgba(16, 16, 20, 0.9) 52%, rgba(22, 22, 28, 0.94)) !important;
+}
+
+html.pms-dark [class*="text-[#1d1d1f]"],
+html.pms-dark [class*="text-slate-950"],
+html.pms-dark [class*="text-slate-900"],
+html.pms-dark [class*="text-slate-800"] {
+  color: #f5f5f7 !important;
+}
+
+html.pms-dark [class*="text-black/"],
+html.pms-dark [class*="text-slate-700"],
+html.pms-dark [class*="text-slate-600"],
+html.pms-dark [class*="text-slate-500"] {
+  color: rgba(245, 245, 247, 0.66) !important;
+}
+
+html.pms-dark [class*="text-black/3"],
+html.pms-dark [class*="text-black/4"],
+html.pms-dark [class*="text-slate-400"] {
+  color: rgba(245, 245, 247, 0.46) !important;
+}
+
+html.pms-dark [class*="text-blue-"],
+html.pms-dark [class*="text-sky-"] {
+  color: #9dccff !important;
+}
+
+html.pms-dark [class*="text-emerald-"] {
+  color: #9ff0b8 !important;
+}
+
+html.pms-dark [class*="text-rose-"] {
+  color: #ffb4ad !important;
+}
+
+html.pms-dark [class*="text-amber-"],
+html.pms-dark [class*="text-orange-"] {
+  color: #ffe58a !important;
+}
+
+html.pms-dark [class*="border-black/"],
+html.pms-dark [class*="border-slate-"],
+html.pms-dark [class*="ring-black/"],
+html.pms-dark [class*="ring-slate-"] {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  --tw-ring-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+html.pms-dark input,
+html.pms-dark select,
+html.pms-dark textarea {
+  background-color: rgba(12, 12, 15, 0.82) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #f5f5f7 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+html.pms-dark input::placeholder,
+html.pms-dark textarea::placeholder {
+  color: rgba(245, 245, 247, 0.38) !important;
+}
+
+html.pms-dark table,
+html.pms-dark thead,
+html.pms-dark tbody,
+html.pms-dark tr,
+html.pms-dark td,
+html.pms-dark th {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+html.pms-dark thead,
+html.pms-dark [class*="tableHead"],
+html.pms-dark [class*="divide-slate"] {
+  background-color: rgba(255, 255, 255, 0.045) !important;
+}
+
+html.pms-dark [class*="shadow-"],
+html.pms-dark [class*="shadow_"] {
+  --tw-shadow-color: rgba(0, 0, 0, 0.75) !important;
+}
+
+html.pms-dark a:not([class*="text-white"]),
+html.pms-dark button:not([class*="bg-[#0071e3]"]):not([class*="bg-blue"]):not([class*="text-white"]) {
+  color: inherit;
+}
+
+html.pms-dark .bg-\[\#0071e3\],
+html.pms-dark [class*="bg-[#0071e3]"] {
+  background-color: #0a84ff !important;
+}
+
+html.pms-dark .pms-workflow-card {
+  background:
+    radial-gradient(circle at top left, rgba(41, 151, 255, 0.14), transparent 24rem),
+    linear-gradient(145deg, rgba(31, 31, 36, 0.96), rgba(18, 18, 23, 0.96) 52%, rgba(25, 25, 31, 0.96)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 30px 80px -58px rgba(0, 0, 0, 0.9) !important;
+}
+
+html.pms-dark .pms-workflow-stat {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.055)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 20px 42px -34px rgba(0, 0, 0, 0.85) !important;
+}
+
+html.pms-dark .pms-workflow-meta-pill {
+  background: rgba(255, 255, 255, 0.075) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(245, 245, 247, 0.72) !important;
+}
+
+html.pms-dark .pms-workflow-meta-pill span:last-child {
+  color: #f5f5f7 !important;
+}
+
+html.pms-dark .pms-workflow-soft-panel,
+html.pms-dark .pms-workflow-admin-panel {
+  background: rgba(255, 255, 255, 0.065) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+html.pms-dark .pms-workflow-return-panel {
+  background: rgba(127, 29, 29, 0.18) !important;
+  border: 1px solid rgba(251, 113, 133, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+html.pms-dark .pms-workflow-action-panel {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.045)) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 24px 54px -42px rgba(0, 0, 0, 0.9) !important;
+}
+
+html.pms-dark .pms-workflow-card .bg-emerald-100 {
+  background: rgba(52, 199, 89, 0.16) !important;
+  color: #9ff0b8 !important;
+}
+
+html.pms-dark .pms-workflow-card .bg-\[\#f0f7ff\] {
+  background: rgba(10, 132, 255, 0.16) !important;
+  color: #9dccff !important;
+}
+
+html.pms-dark .pms-workflow-card .bg-rose-100 {
+  background: rgba(255, 69, 58, 0.16) !important;
+  color: #ffb4ad !important;
+}
+
+html.pms-dark .pms-workflow-card .bg-amber-100 {
+  background: rgba(255, 214, 10, 0.16) !important;
+  color: #ffe58a !important;
+}
+
+html.pms-dark .tender-status-legend {
+  background:
+    radial-gradient(circle at top left, rgba(10, 132, 255, 0.16), transparent 24rem),
+    linear-gradient(135deg, rgba(30, 30, 35, 0.92), rgba(18, 18, 23, 0.92)) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 20px 50px -44px rgba(0, 0, 0, 0.9) !important;
+}
+
+html.pms-dark .tender-status-legend .tender-legend-label {
+  color: rgba(245, 245, 247, 0.68) !important;
+}
+
+html.pms-dark .tender-status-chip {
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 26px -22px rgba(0, 0, 0, 0.9) !important;
+}
+
+html.pms-dark .tender-status-chip-gray {
+  background: rgba(148, 163, 184, 0.16) !important;
+  color: rgba(226, 232, 240, 0.9) !important;
+  border-color: rgba(203, 213, 225, 0.2) !important;
+  --tw-ring-color: rgba(203, 213, 225, 0.12) !important;
+}
+
+html.pms-dark .tender-status-chip-green {
+  background: rgba(22, 101, 52, 0.46) !important;
+  color: #9ff0b8 !important;
+  border-color: rgba(74, 222, 128, 0.42) !important;
+  --tw-ring-color: rgba(74, 222, 128, 0.18) !important;
+}
+
+html.pms-dark .tender-status-chip-red {
+  background: rgba(127, 29, 29, 0.48) !important;
+  color: #ffb4ad !important;
+  border-color: rgba(251, 113, 133, 0.42) !important;
+  --tw-ring-color: rgba(251, 113, 133, 0.18) !important;
+}
+
+html.pms-dark .tender-status-chip-yellow {
+  background: rgba(146, 64, 14, 0.46) !important;
+  color: #ffd27a !important;
+  border-color: rgba(251, 191, 36, 0.42) !important;
+  --tw-ring-color: rgba(251, 191, 36, 0.18) !important;
+}
+
+html.pms-dark .tender-status-chip-cyan {
+  background: rgba(8, 89, 112, 0.46) !important;
+  color: #8ee9ff !important;
+  border-color: rgba(34, 211, 238, 0.38) !important;
+  --tw-ring-color: rgba(34, 211, 238, 0.16) !important;
+}
+
+html.pms-dark .tender-row-neutral,
+html.pms-dark .tender-row-neutral > td {
+  background-color: rgba(255, 255, 255, 0.035) !important;
+  color: rgba(245, 245, 247, 0.76) !important;
+}
+
+html.pms-dark .tender-row-issue,
+html.pms-dark .tender-row-issue > td {
+  background-color: rgba(127, 29, 29, 0.22) !important;
+  color: rgba(255, 238, 238, 0.94) !important;
+}
+
+html.pms-dark .tender-row-ok,
+html.pms-dark .tender-row-ok > td {
+  background-color: rgba(6, 78, 59, 0.2) !important;
+  color: rgba(235, 255, 244, 0.94) !important;
+}
+
+html.pms-dark .tender-row-neutral {
+  border-left-color: rgba(148, 163, 184, 0.82) !important;
+}
+
+html.pms-dark .tender-row-issue {
+  border-left-color: #ff453a !important;
+}
+
+html.pms-dark .tender-row-ok {
+  border-left-color: #30d158 !important;
+}
+
+html.pms-dark .tender-row-neutral:hover > td,
+html.pms-dark .tender-row-issue:hover > td,
+html.pms-dark .tender-row-ok:hover > td {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+html.pms-dark .tender-row-neutral input[type="checkbox"],
+html.pms-dark .tender-row-issue input[type="checkbox"],
+html.pms-dark .tender-row-ok input[type="checkbox"] {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+}
+
+html.pms-dark .tender-step-shell {
+  background:
+    linear-gradient(145deg, rgba(27, 27, 32, 0.96), rgba(15, 15, 19, 0.96)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 28px 78px -58px rgba(0, 0, 0, 0.95);
+}
+
+html.pms-dark .tender-step-rail {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(10, 132, 255, 0.15), transparent 20rem),
+    linear-gradient(180deg, rgba(24, 24, 29, 0.98), rgba(16, 16, 20, 0.98)) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+html.pms-dark .tender-step-track {
+  background: rgba(255, 255, 255, 0.045) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 24px 70px -54px rgba(0, 0, 0, 0.92) !important;
+}
+
+html.pms-dark .tender-step-progress {
+  background: rgba(255, 255, 255, 0.09) !important;
+}
+
+html.pms-dark .tender-step-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.045)) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 18px 42px -34px rgba(0, 0, 0, 0.92) !important;
+}
+
+html.pms-dark .tender-step-card-selected {
+  background:
+    radial-gradient(circle at top right, rgba(10, 132, 255, 0.34), transparent 9rem),
+    linear-gradient(145deg, rgba(12, 62, 120, 0.86), rgba(22, 22, 28, 0.96)) !important;
+  border-color: rgba(10, 132, 255, 0.34) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 24px 58px -36px rgba(10, 132, 255, 0.35) !important;
+}
+
+html.pms-dark .tender-step-card-locked {
+  opacity: 0.52;
+}
+
+html.pms-dark .tender-step-icon {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+html.pms-dark .tender-step-number:not(.tender-step-number-selected),
+html.pms-dark .tender-step-status:not(.tender-step-status-selected) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(245, 245, 247, 0.86) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+html.pms-dark .tender-step-number-selected,
+html.pms-dark .tender-step-status-selected {
+  background: rgba(10, 132, 255, 0.96) !important;
+  color: #ffffff !important;
+  border-color: rgba(10, 132, 255, 0.7) !important;
+}
+
+html.pms-dark .tender-step-viewing {
+  color: #9dccff !important;
+}
+
+html.pms-dark .pms-popup-content {
+  background:
+    radial-gradient(circle at 16% 0%, rgba(255, 69, 58, 0.12), transparent 18rem),
+    linear-gradient(145deg, rgba(31, 31, 36, 0.98), rgba(17, 17, 22, 0.98)) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #f5f5f7 !important;
+}
+
+html.pms-dark .pms-popup-header {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.09), transparent 12rem),
+    linear-gradient(145deg, rgba(45, 35, 39, 0.96), rgba(22, 22, 28, 0.98)) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+html.pms-dark .pms-popup-body {
+  background: rgba(18, 18, 23, 0.98) !important;
+}
+
+html.pms-dark .pms-popup-badge,
+html.pms-dark .pms-popup-diagnostic,
+html.pms-dark .pms-popup-close {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(245, 245, 247, 0.76) !important;
+}
+
+html.pms-dark .pms-popup-content [class*="ring-white"],
+html.pms-dark .pms-popup-content [class*="bg-white/"] {
+  --tw-ring-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+html.pms-dark .pms-work-legend {
+  background: rgba(255, 255, 255, 0.045) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+html.pms-dark .pms-work-legend-chip {
+  background: rgba(255, 255, 255, 0.055) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(245, 245, 247, 0.76) !important;
+}
+
+html.pms-dark .pms-work-legend-label {
+  color: rgba(245, 245, 247, 0.82) !important;
+}
+
+html.pms-dark .pms-work-legend-dot {
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.055),
+    0 0 12px currentColor !important;
+}
+
+html.pms-dark .pms-work-legend-dot-critical {
+  background: #ff453a !important;
+  color: rgba(255, 69, 58, 0.5) !important;
+}
+
+html.pms-dark .pms-work-legend-dot-high {
+  background: #ff9f0a !important;
+  color: rgba(255, 159, 10, 0.5) !important;
+}
+
+html.pms-dark .pms-work-legend-dot-normal {
+  background: #8e8dff !important;
+  color: rgba(142, 141, 255, 0.5) !important;
+}
+
+html.pms-dark .pms-work-legend-dot-completed {
+  background: #30d158 !important;
+  color: rgba(48, 209, 88, 0.5) !important;
+}
+
+html.pms-dark .pms-work-legend-dot-returned {
+  background: #ff6b2c !important;
+  color: rgba(255, 107, 44, 0.5) !important;
+}
+
+html.pms-dark .pms-work-legend-dot-system {
+  background: #64d2ff !important;
+  color: rgba(100, 210, 255, 0.5) !important;
+}
