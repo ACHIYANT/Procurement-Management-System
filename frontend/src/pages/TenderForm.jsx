@@ -40,6 +40,9 @@ const initialForm = {
   tender_fee_amount: "",
   bid_publish_date: "",
   bid_submission_date: "",
+  price_bid_valid_upto: "",
+  technical_bid_validity_applicable: false,
+  technical_bid_valid_upto: "",
   location_scope: "PANCHKULA",
   document_path: "",
 };
@@ -310,6 +313,12 @@ export default function TenderForm() {
         }));
         next.allocation_quantity = "";
       }
+      if (field === "technical_bid_validity_applicable") {
+        next.technical_bid_validity_applicable = value === "yes";
+        if (value !== "yes") {
+          next.technical_bid_valid_upto = "";
+        }
+      }
 
       return next;
     });
@@ -357,6 +366,13 @@ export default function TenderForm() {
     const validationErrors = buildRequiredErrors(form, getRequiredFields(form));
     if (form.tender_type === "rate_contract" && !form.rate_contract_type) {
       validationErrors.rate_contract_type = "Rate contract type is required.";
+    }
+    if (
+      form.technical_bid_validity_applicable &&
+      !form.technical_bid_valid_upto
+    ) {
+      validationErrors.technical_bid_valid_upto =
+        "Technical bid validity date is required.";
     }
     if (
       selectedCaseItems.length &&
@@ -895,6 +911,46 @@ export default function TenderForm() {
                   onChange={update("bid_submission_date")}
                 />
               </Field>
+              <Field
+                label="Price / Commercial Bid Valid Upto"
+                hint="Also called price validity or bid validity. My Work will warn before expiry."
+              >
+                <Input
+                  type="date"
+                  value={form.price_bid_valid_upto}
+                  onChange={update("price_bid_valid_upto")}
+                />
+              </Field>
+              <Field
+                label="Technical Bid Validity?"
+                hint="Use only when the tender specifically has separate technical bid validity."
+              >
+                <select
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  value={form.technical_bid_validity_applicable ? "yes" : "no"}
+                  onChange={update("technical_bid_validity_applicable")}
+                >
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </Field>
+              {form.technical_bid_validity_applicable ? (
+                <Field
+                  label="Technical Bid Valid Upto"
+                  hint="Separate technical validity date, if applicable."
+                >
+                  <Input
+                    type="date"
+                    value={form.technical_bid_valid_upto}
+                    onChange={update("technical_bid_valid_upto")}
+                    aria-invalid={Boolean(errors.technical_bid_valid_upto)}
+                    className={invalidControlClass(
+                      errors.technical_bid_valid_upto,
+                    )}
+                  />
+                  <FieldError message={errors.technical_bid_valid_upto} />
+                </Field>
+              ) : null}
               <Button
                 className="md:col-span-2 bg-blue-700 text-white hover:bg-blue-800"
                 disabled={saving}

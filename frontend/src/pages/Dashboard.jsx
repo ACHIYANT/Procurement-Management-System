@@ -633,12 +633,12 @@ export default function Dashboard() {
                 emptyMessage="No indent activity yet."
                 renderRow={(row) => (
                   <Link key={`indent-${row.id}`} to={`/indents/${row.id}`} className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:bg-slate-50">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
                         <div className="font-semibold text-slate-900">{row.indent_no}</div>
                         <div className="mt-1 text-sm text-slate-500">{row.department_name}</div>
                       </div>
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                      <span className="shrink-0 whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
                         {label(row.status)}
                       </span>
                     </div>
@@ -651,12 +651,12 @@ export default function Dashboard() {
                 emptyMessage="No procurement cases yet."
                 renderRow={(row) => (
                   <Link key={`case-${row.id}`} to={`/procurement-cases/${row.id}`} className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:bg-slate-50">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
                         <div className="font-semibold text-slate-900">{row.case_no}</div>
                         <div className="mt-1 text-sm text-slate-500">{row.title}</div>
                       </div>
-                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                      <span className="shrink-0 whitespace-nowrap rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
                         {label(row.procurement_mode)}
                       </span>
                     </div>

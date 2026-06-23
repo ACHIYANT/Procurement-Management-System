@@ -36,6 +36,18 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(255),
         allowNull: false,
       },
+      communication_direction: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+      },
+      reference_no: {
+        type: DataTypes.STRING(160),
+        allowNull: true,
+      },
+      reference_date: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+      },
       remarks: {
         type: DataTypes.TEXT,
         allowNull: true,

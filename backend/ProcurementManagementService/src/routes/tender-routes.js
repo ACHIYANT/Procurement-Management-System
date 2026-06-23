@@ -6,6 +6,7 @@ const router = express.Router();
 router.get("/", TenderController.list);
 router.post("/", TenderController.create);
 router.get("/:id", TenderController.getById);
+router.patch("/:id", TenderController.update);
 router.patch("/:tenderId/pbg-setup", TenderController.updatePbgSetup);
 router.post("/:tenderId/submission-extensions", TenderController.createSubmissionExtension);
 router.post("/:tenderId/vendors", TenderController.addVendor);

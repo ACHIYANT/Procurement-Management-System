@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   BellRing,
@@ -59,12 +59,12 @@ const taskFilterOptions = [
 ];
 
 const colorLegendItems = [
-  { label: "Critical priority / overdue", helper: "Immediate attention", dotClass: "bg-rose-600" },
-  { label: "High priority", helper: "Important follow-up", dotClass: "bg-amber-500" },
-  { label: "Medium / low priority", helper: "Regular work", dotClass: "bg-[#7986cb]" },
-  { label: "Completed", helper: "Finished work", dotClass: "bg-emerald-600" },
-  { label: "Returned", helper: "Sent back with remarks", dotClass: "bg-orange-500" },
-  { label: "System / open", helper: "Auto or active watch", dotClass: "bg-sky-500" },
+  { label: "Critical priority / overdue", helper: "Immediate attention", tone: "critical", dotClass: "bg-rose-600" },
+  { label: "High priority", helper: "Important follow-up", tone: "high", dotClass: "bg-amber-500" },
+  { label: "Medium / low priority", helper: "Regular work", tone: "normal", dotClass: "bg-[#7986cb]" },
+  { label: "Completed", helper: "Finished work", tone: "completed", dotClass: "bg-emerald-600" },
+  { label: "Returned", helper: "Sent back with remarks", tone: "returned", dotClass: "bg-orange-500" },
+  { label: "System / open", helper: "Auto or active watch", tone: "system", dotClass: "bg-sky-500" },
 ];
 
 const priorityOptions = [
@@ -81,6 +81,7 @@ const reminderFrequencyOptions = [
   { value: "every_2_hours", label: "Every 2 hours" },
   { value: "every_6_hours", label: "Every 6 hours" },
   { value: "every_12_hours", label: "Every 12 hours" },
+  { value: "every_5_days", label: "Every 5 days" },
   { value: "daily", label: "Every day" },
   { value: "weekly", label: "Every week" },
 ];
@@ -270,6 +271,26 @@ const getHourLabel = (hour) => {
   if (hour < 12) return `${hour} AM`;
   if (hour === 12) return "12 PM";
   return `${hour - 12} PM`;
+};
+
+const getIndiaCurrentMinuteParts = () => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const valueByType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const hour = Number(valueByType.hour === "24" ? "0" : valueByType.hour);
+
+  return {
+    dateKey: `${valueByType.year}-${valueByType.month}-${valueByType.day}`,
+    hour: Number.isFinite(hour) ? hour : new Date().getHours(),
+    minute: Number(valueByType.minute || 0),
+  };
 };
 
 const getTaskHour = (task) => {
@@ -551,6 +572,7 @@ const getReminderFrequencyMs = (frequency) => {
   if (frequency === "every_2_hours") return 2 * 60 * 60 * 1000;
   if (frequency === "every_6_hours") return 6 * 60 * 60 * 1000;
   if (frequency === "every_12_hours") return 12 * 60 * 60 * 1000;
+  if (frequency === "every_5_days") return 5 * 24 * 60 * 60 * 1000;
   if (frequency === "daily") return 24 * 60 * 60 * 1000;
   if (frequency === "weekly") return 7 * 24 * 60 * 60 * 1000;
   return null;
@@ -699,16 +721,16 @@ function Pill({ children, tone = "slate" }) {
 
 function ColorLegend() {
   return (
-    <div className="mb-4 rounded-[1.25rem] border border-black/8 bg-white px-4 py-3 shadow-[0_16px_45px_-36px_rgba(0,0,0,0.35)]">
+    <div className="pms-work-legend mb-4 rounded-[1.25rem] border border-black/8 bg-white px-4 py-3 shadow-[0_16px_45px_-36px_rgba(0,0,0,0.35)]">
       <div className="flex flex-wrap gap-2">
         {colorLegendItems.map((item) => (
           <div
             key={item.label}
-            className="flex items-center gap-2 rounded-full border border-black/8 bg-[#f8fafd] px-3 py-2 text-xs"
+            className="pms-work-legend-chip flex items-center gap-2 rounded-full border border-black/8 bg-[#f8fafd] px-3 py-2 text-xs"
             title={item.helper}
           >
-            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.dotClass}`} />
-            <span className="font-semibold text-black/74">{item.label}</span>
+            <span className={`pms-work-legend-dot pms-work-legend-dot-${item.tone} h-2.5 w-2.5 shrink-0 rounded-full ${item.dotClass}`} />
+            <span className="pms-work-legend-label font-semibold text-black/74">{item.label}</span>
           </div>
         ))}
       </div>
@@ -773,7 +795,7 @@ function DateTimePicker({ label, value, onChange, allowClear = false }) {
 
 function CalendarTimedView({ days, tasksByDay, onTaskClick }) {
   const scrollBoxRef = useRef(null);
-  const currentHourRowRef = useRef(null);
+  const [currentMinuteParts, setCurrentMinuteParts] = useState(() => getIndiaCurrentMinuteParts());
   const hours = Array.from({ length: 24 }, (_, index) => index);
   const timeColumnWidth = 74;
   const dayColumnMinWidth = days.length >= 7 ? 190 : days.length >= 4 ? 220 : 280;
@@ -782,31 +804,55 @@ function CalendarTimedView({ days, tasksByDay, onTaskClick }) {
     gridTemplateColumns,
     minWidth: `${timeColumnWidth + days.length * dayColumnMinWidth}px`,
   };
-  const now = new Date();
-  const currentHour = now.getHours();
-  const todayKey = toDateKey(now);
+  const currentHour = currentMinuteParts.hour;
+  const currentMinute = currentMinuteParts.minute;
+  const todayKey = currentMinuteParts.dateKey;
   const visibleToday = days.some((day) => toDateKey(day) === todayKey);
   const daysRangeKey = days.map((day) => toDateKey(day)).join("|");
 
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentMinuteParts(getIndiaCurrentMinuteParts());
+    }, 60 * 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useLayoutEffect(() => {
     if (!visibleToday) return undefined;
 
-    const timer = window.setTimeout(() => {
+    const focusCurrentTime = (behavior = "smooth") => {
       const scrollBox = scrollBoxRef.current;
-      const currentHourRow = currentHourRowRef.current;
+      const currentHourRow = scrollBox?.querySelector(`[data-hour-row="${currentHour}"]`);
       if (!scrollBox || !currentHourRow) return;
 
-      const rowTop = currentHourRow.offsetTop;
-      const targetTop = Math.max(rowTop - (scrollBox.clientHeight / 2) + (currentHourRow.clientHeight / 2), 0);
-      scrollBox.scrollTo({ top: targetTop, behavior: "smooth" });
-    }, 120);
+      const rowRect = currentHourRow.getBoundingClientRect();
+      const scrollBoxRect = scrollBox.getBoundingClientRect();
+      const rowHeight = rowRect.height || currentHourRow.offsetHeight || 68;
+      const rowTopInsideScrollBox = rowRect.top - scrollBoxRect.top + scrollBox.scrollTop;
+      const currentTimeTop = rowTopInsideScrollBox + (rowHeight * currentMinute) / 60;
+      const centeredTop = currentTimeTop - scrollBox.clientHeight / 2;
+      const maxTop = Math.max(scrollBox.scrollHeight - scrollBox.clientHeight, 0);
+      const targetTop = Math.min(Math.max(centeredTop, 0), maxTop);
 
-    return () => window.clearTimeout(timer);
-  }, [currentHour, daysRangeKey, visibleToday]);
+      if (Math.abs(scrollBox.scrollTop - targetTop) < 2) return;
+      scrollBox.scrollTo({ top: targetTop, behavior });
+    };
+
+    const frame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => focusCurrentTime("smooth"));
+    });
+    const settleTimer = window.setTimeout(() => focusCurrentTime("smooth"), 650);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
+    };
+  }, [currentHour, currentMinute, daysRangeKey, visibleToday]);
 
   return (
     <div className="overflow-hidden rounded-[1.6rem] border border-black/8 bg-white">
-      <div ref={scrollBoxRef} className="max-h-[760px] overflow-auto">
+      <div ref={scrollBoxRef} className="max-h-[760px] overflow-auto [overflow-anchor:none]">
         <div
           className="sticky top-0 z-10 grid min-w-full border-b border-black/8 bg-white shadow-[0_1px_0_rgba(0,0,0,0.04)]"
           style={gridStyle}
@@ -817,7 +863,7 @@ function CalendarTimedView({ days, tasksByDay, onTaskClick }) {
           />
           {days.map((day) => {
             const dayTasks = getDateTasks(tasksByDay, day);
-            const isToday = toDateKey(day) === toDateKey(new Date());
+            const isToday = toDateKey(day) === todayKey;
             return (
               <div key={toDateKey(day)} className="overflow-hidden border-l border-black/8 px-3 py-3 text-center">
                 <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${isToday ? "text-[#0b57d0]" : "text-black/50"}`}>
@@ -838,7 +884,7 @@ function CalendarTimedView({ days, tasksByDay, onTaskClick }) {
         {hours.map((hour) => (
           <div
             key={hour}
-            ref={visibleToday && hour === currentHour ? currentHourRowRef : undefined}
+            data-hour-row={hour}
             className="grid min-h-[68px] min-w-full border-b border-black/8 last:border-b-0"
             style={gridStyle}
           >

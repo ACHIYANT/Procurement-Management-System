@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Layers3, Pencil, RotateCcw, Save, SendToBack } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  Layers3,
+  Pencil,
+  RotateCcw,
+  Save,
+  SendToBack,
+} from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import AppLoader from "@/components/AppLoader";
@@ -80,6 +88,9 @@ const emptyReturnForm = () => ({
 const emptyAdditionalDocumentForm = () => ({
   document_type: "department_communication",
   document_title: "",
+  communication_direction: "from_indenting_organization",
+  reference_no: "",
+  reference_date: "",
   document_path: "",
   remarks: "",
 });
@@ -94,6 +105,15 @@ const additionalDocumentTypes = [
   { value: "supporting_document", label: "Supporting Document" },
 ];
 
+const communicationDirectionOptions = [
+  {
+    value: "from_indenting_organization",
+    label: "From Indenting Organization",
+  },
+  { value: "to_indenting_organization", label: "To Indenting Organization" },
+  { value: "internal_note", label: "Internal Note" },
+];
+
 const detailShellClass =
   "border-0 bg-white shadow-[0_20px_50px_-40px_rgba(0,0,0,0.45)] ring-1 ring-black/8";
 const sectionTitleClass =
@@ -106,17 +126,17 @@ const actionPrimaryClass =
 const actionSecondaryClass =
   "rounded-full border border-black/10 bg-white text-[#1d1d1f] hover:bg-[#f5f5f7]";
 const workflowCardClass =
-  "overflow-hidden rounded-[30px] bg-gradient-to-br from-white via-white to-[#f8f8fb] shadow-[0_24px_70px_-52px_rgba(0,0,0,0.42)] ring-1 ring-black/8";
+  "pms-workflow-card overflow-hidden rounded-[30px] bg-gradient-to-br from-white via-white to-[#f8f8fb] shadow-[0_24px_70px_-52px_rgba(0,0,0,0.42)] ring-1 ring-black/8";
 const workflowStatClass =
-  "rounded-[22px] bg-white/86 px-4 py-3 shadow-[0_14px_35px_-30px_rgba(0,0,0,0.42)] ring-1 ring-black/6";
+  "pms-workflow-stat rounded-[22px] bg-white/86 px-4 py-3 shadow-[0_14px_35px_-30px_rgba(0,0,0,0.42)] ring-1 ring-black/6";
 const workflowStatLabelClass =
   "text-[10px] font-semibold uppercase tracking-[0.2em] text-black/38";
 const workflowStatValueClass =
   "mt-1.5 text-[15px] font-semibold leading-5 text-[#1d1d1f]";
 const workflowMetaPillClass =
-  "inline-flex items-center gap-1.5 rounded-full bg-[#f5f5f7] px-3 py-1.5 text-xs font-medium text-black/58 ring-1 ring-black/6";
+  "pms-workflow-meta-pill inline-flex items-center gap-1.5 rounded-full bg-[#f5f5f7] px-3 py-1.5 text-xs font-medium text-black/58 ring-1 ring-black/6";
 const actionPanelClass =
-  "rounded-[26px] border bg-white/74 p-4 shadow-[0_18px_45px_-38px_rgba(0,0,0,0.45)] backdrop-blur";
+  "pms-workflow-action-panel rounded-[26px] border bg-white/74 p-4 shadow-[0_18px_45px_-38px_rgba(0,0,0,0.45)] backdrop-blur";
 
 const calculateEstimatedAmount = (item, estimatedRate) => {
   const rate = Number(estimatedRate || 0);
@@ -147,6 +167,7 @@ export default function IndentDetail() {
   const [additionalDocumentForm, setAdditionalDocumentForm] = useState(
     emptyAdditionalDocumentForm,
   );
+  const [additionalDocumentsOpen, setAdditionalDocumentsOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [popup, setPopup] = useState({
     open: false,
@@ -272,6 +293,20 @@ export default function IndentDetail() {
   const additionalDocuments = Array.isArray(indent?.documents)
     ? indent.documents
     : [];
+  const adminApprovalRequiredItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          item?.administrative_approval_required ||
+          ["required", "auto_required"].includes(
+            String(item?.administrative_approval_status || "").toLowerCase(),
+          ),
+      ),
+    [items],
+  );
+  const isAdminApprovalCopyMissing =
+    adminApprovalRequiredItems.length > 0 &&
+    !indent?.administrative_approval_document_path;
 
   const visibleItems = useMemo(() => {
     if (!isOfficerFocusedView) return items;
@@ -505,6 +540,26 @@ export default function IndentDetail() {
             {indent?.administrative_approval_remarks || "NA"}
           </p>
         </div>
+        {isAdminApprovalCopyMissing ? (
+          <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="font-semibold">
+                  Administrative approval is required but copy is not uploaded.
+                </p>
+                <p className="text-xs text-amber-800/80">
+                  {adminApprovalRequiredItems.length} item
+                  {adminApprovalRequiredItems.length === 1 ? "" : "s"} flagged
+                  for administrative approval. Procurement should verify this
+                  before moving the case forward.
+                </p>
+              </div>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200">
+                Attention Needed
+              </span>
+            </div>
+          </div>
+        ) : null}
         <div
           className={`${isOfficerFocusedView ? "grid gap-2 xl:grid-cols-2" : "space-y-3"}`}
         >
@@ -583,8 +638,12 @@ export default function IndentDetail() {
             </div>
           ) : null}
         </div>
-        <details className="rounded-[22px] bg-[#f5f5f7] p-3 ring-1 ring-black/6">
-          <summary className="flex cursor-pointer list-none flex-col gap-1 md:flex-row md:items-end md:justify-between">
+        <div className="rounded-[22px] bg-[#f5f5f7] p-3 ring-1 ring-black/6">
+          <button
+            type="button"
+            className="flex w-full flex-col gap-1 text-left md:flex-row md:items-center md:justify-between"
+            onClick={() => setAdditionalDocumentsOpen((current) => !current)}
+          >
             <div>
               <p className="text-sm font-semibold text-[#1d1d1f]">
                 Additional Indent Documents
@@ -594,14 +653,21 @@ export default function IndentDetail() {
                 supporting files as one traceable document set.
               </p>
             </div>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-black/38">
+            <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-black/46 ring-1 ring-black/8">
+              {additionalDocumentsOpen ? "Expanded" : "Collapsed"} ·{" "}
               {additionalDocuments.length} Uploaded
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition ${
+                  additionalDocumentsOpen ? "rotate-180" : ""
+                }`}
+              />
             </span>
-          </summary>
+          </button>
 
+          {additionalDocumentsOpen ? (
           <div className="mt-3">
           {canManageIndentDocuments ? (
-            <div className="mt-3 grid gap-2 lg:grid-cols-[0.8fr_1fr_1.2fr]">
+            <div className="mt-3 grid gap-2 lg:grid-cols-[0.8fr_1fr_0.8fr_1.2fr]">
               <label className="space-y-1">
                 <span className="text-xs font-medium text-black/62">
                   Document Type
@@ -625,6 +691,27 @@ export default function IndentDetail() {
               </label>
               <label className="space-y-1">
                 <span className="text-xs font-medium text-black/62">
+                  Communication Direction
+                </span>
+                <select
+                  className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm text-[#1d1d1f]"
+                  value={additionalDocumentForm.communication_direction}
+                  onChange={(event) =>
+                    setAdditionalDocumentForm((current) => ({
+                      ...current,
+                      communication_direction: event.target.value,
+                    }))
+                  }
+                >
+                  {communicationDirectionOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-black/62">
                   Document Title
                 </span>
                 <Input
@@ -638,6 +725,38 @@ export default function IndentDetail() {
                   placeholder="e.g. Department clarification mail"
                 />
               </label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-black/62">
+                    Reference No.
+                  </span>
+                  <Input
+                    value={additionalDocumentForm.reference_no}
+                    onChange={(event) =>
+                      setAdditionalDocumentForm((current) => ({
+                        ...current,
+                        reference_no: event.target.value,
+                      }))
+                    }
+                    placeholder="Letter / email ref."
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-black/62">
+                    Reference Date
+                  </span>
+                  <Input
+                    type="date"
+                    value={additionalDocumentForm.reference_date}
+                    onChange={(event) =>
+                      setAdditionalDocumentForm((current) => ({
+                        ...current,
+                        reference_date: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
               <div className="lg:row-span-2">
                 <FileAttachmentField
                   label="Upload Document"
@@ -655,7 +774,7 @@ export default function IndentDetail() {
                   emptyLabel="No additional document selected."
                 />
               </div>
-              <label className="space-y-1 lg:col-span-2">
+              <label className="space-y-1 lg:col-span-3">
                 <span className="text-xs font-medium text-black/62">
                   Remarks
                 </span>
@@ -672,7 +791,7 @@ export default function IndentDetail() {
                   placeholder="Short note about this upload"
                 />
               </label>
-              <div className="flex justify-end lg:col-span-3">
+              <div className="flex justify-end lg:col-span-4">
                 <Button
                   type="button"
                   size="sm"
@@ -701,6 +820,15 @@ export default function IndentDetail() {
                 readOnly
                 emptyLabel="Document path missing."
                 helperText={[
+                  document.communication_direction
+                    ? label(document.communication_direction)
+                    : null,
+                  document.reference_no
+                    ? `Ref. ${document.reference_no}`
+                    : null,
+                  document.reference_date
+                    ? `Dated ${document.reference_date}`
+                    : null,
                   label(document.document_type),
                   document.remarks,
                   document.uploader?.employee_name
@@ -719,7 +847,8 @@ export default function IndentDetail() {
             ) : null}
           </div>
           </div>
-        </details>
+          ) : null}
+        </div>
       </CardContent>
     </Card>
   );
@@ -981,9 +1110,11 @@ export default function IndentDetail() {
                       ["Estimate", compactMoney(item.estimated_amount), money(item.estimated_amount)],
                       [
                         "Admin Approval",
-                        item.administrative_approval_required
-                          ? "Required"
-                          : "Not Required",
+                        item.administrative_approval_status === "auto_required"
+                          ? "Auto required above Rs. 1 Cr"
+                          : item.administrative_approval_required
+                            ? "Required"
+                            : "Not Required",
                       ],
                       ["Make / Company", item.preferred_make || "NA"],
                     ];
@@ -1068,7 +1199,7 @@ export default function IndentDetail() {
 
                         {item.specification ? (
                           <div
-                            className={`${isOfficerFocusedView ? "mx-4 mb-3 px-4 py-3" : "mx-5 mb-4 px-4 py-3"} rounded-[22px] bg-[#f5f5f7] ring-1 ring-black/6`}
+                            className={`${isOfficerFocusedView ? "mx-4 mb-3 px-4 py-3" : "mx-5 mb-4 px-4 py-3"} pms-workflow-soft-panel rounded-[22px] bg-[#f5f5f7] ring-1 ring-black/6`}
                           >
                             <p className="text-[10px] font-semibold uppercase tracking-wide text-black/42">
                               Specification
@@ -1081,7 +1212,7 @@ export default function IndentDetail() {
 
                         {item.return_reason ? (
                           <div
-                            className={`${isOfficerFocusedView ? "mx-4 mb-3 px-4 py-3" : "mx-5 mb-4 px-4 py-3"} rounded-[22px] bg-[#fff6f6] ring-1 ring-rose-200`}
+                            className={`${isOfficerFocusedView ? "mx-4 mb-3 px-4 py-3" : "mx-5 mb-4 px-4 py-3"} pms-workflow-return-panel rounded-[22px] bg-[#fff6f6] ring-1 ring-rose-200`}
                           >
                             <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">
                               Return Reason
@@ -1093,7 +1224,7 @@ export default function IndentDetail() {
                         ) : null}
 
                         {isAdmin ? (
-                          <div className={`${isOfficerFocusedView ? "mx-4 mb-4" : "mx-5 mb-5"} rounded-[24px] bg-[#f5f5f7] p-4 ring-1 ring-black/6`}>
+                          <div className={`${isOfficerFocusedView ? "mx-4 mb-4" : "mx-5 mb-5"} pms-workflow-admin-panel rounded-[24px] bg-[#f5f5f7] p-4 ring-1 ring-black/6`}>
                             <div className="mb-3">
                               <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-black/42">
                                 Admin Control

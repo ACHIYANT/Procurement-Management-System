@@ -35,6 +35,7 @@ const REMINDER_FREQUENCIES = new Set([
   "every_2_hours",
   "every_6_hours",
   "every_12_hours",
+  "every_5_days",
   "daily",
   "weekly",
 ]);
@@ -45,6 +46,20 @@ const TASK_REPEAT_RULES = new Set([
 ]);
 const REMINDER_UPDATE_FIELDS = new Set(["reminder_at", "reminder_sound", "reminder_frequency"]);
 const PROGRESS_UPDATE_FIELDS = new Set(["checklist_json"]);
+const ACTIVE_TASK_STATUSES = new Set(["open", "in_progress", "returned", "reassigned"]);
+const REMINDER_OCCURRENCE_RULE_CODE = "task_reminder_occurrence";
+const REMINDER_OCCURRENCE_ENTITY_TYPE = "work_task_reminder";
+const MAX_REMINDER_OCCURRENCE_TASKS = 96;
+const REMINDER_FREQUENCY_INTERVAL_MS = {
+  every_15_minutes: 15 * 60 * 1000,
+  hourly: 60 * 60 * 1000,
+  every_2_hours: 2 * 60 * 60 * 1000,
+  every_6_hours: 6 * 60 * 60 * 1000,
+  every_12_hours: 12 * 60 * 60 * 1000,
+  every_5_days: 5 * 24 * 60 * 60 * 1000,
+  daily: 24 * 60 * 60 * 1000,
+  weekly: 7 * 24 * 60 * 60 * 1000,
+};
 const ORIGIN_TYPES = new Set([
   "self",
   "manual_assignment",
@@ -241,6 +256,41 @@ const shiftDateByDelta = (value, deltaMs) => {
   return new Date(date.getTime() + deltaMs);
 };
 
+const isSameMinute = (first, second) => {
+  if (!first || !second) return false;
+  return Math.floor(first.getTime() / 60000) === Math.floor(second.getTime() / 60000);
+};
+
+const getReminderOccurrenceEntityId = (taskId, occurrenceAt) =>
+  `${taskId}:${occurrenceAt.toISOString()}`;
+
+const buildReminderOccurrences = (task = {}) => {
+  if (!task?.id || task.system_rule_code === REMINDER_OCCURRENCE_RULE_CODE) return [];
+  if (!ACTIVE_TASK_STATUSES.has(task.status)) return [];
+
+  const reminderAt = task.reminder_at ? new Date(task.reminder_at) : null;
+  if (!reminderAt || Number.isNaN(reminderAt.getTime())) return [];
+
+  const dueAt = task.due_at ? new Date(task.due_at) : null;
+  const hasValidDueAt = dueAt && !Number.isNaN(dueAt.getTime());
+  const frequency = task.reminder_frequency || "once";
+  const intervalMs = REMINDER_FREQUENCY_INTERVAL_MS[frequency];
+
+  if (!intervalMs || !hasValidDueAt || dueAt <= reminderAt) {
+    return isSameMinute(reminderAt, dueAt) ? [] : [reminderAt];
+  }
+
+  const occurrences = [];
+  let cursor = new Date(reminderAt);
+  while (cursor < dueAt && occurrences.length < MAX_REMINDER_OCCURRENCE_TASKS) {
+    if (!isSameMinute(cursor, dueAt)) {
+      occurrences.push(new Date(cursor));
+    }
+    cursor = new Date(cursor.getTime() + intervalMs);
+  }
+  return occurrences;
+};
+
 const normalizeChecklistForRecurrence = (value) =>
   normalizeArray(value).map((item) => {
     if (typeof item === "string") return { text: item, done: false };
@@ -356,6 +406,86 @@ class WorkTaskService {
       .filter((assignee) => assignee.assigned_to_employee_id || assignee.assigned_to_name);
   }
 
+  async syncReminderOccurrenceTasksForTask(task, transaction) {
+    if (!task?.id || task.system_rule_code === REMINDER_OCCURRENCE_RULE_CODE) return;
+
+    const occurrences = buildReminderOccurrences(task);
+    const desiredEntityIds = new Set(
+      occurrences.map((occurrenceAt) => getReminderOccurrenceEntityId(task.id, occurrenceAt)),
+    );
+    const existingOccurrences = await this.repository.findReminderOccurrenceTasks(task.id, transaction);
+
+    for (const existing of existingOccurrences) {
+      if (!desiredEntityIds.has(existing.entity_id)) {
+        await this.repository.updateTask(
+          existing,
+          {
+            status: "cancelled",
+            last_activity_at: new Date(),
+          },
+          transaction,
+        );
+        await this.repository.updateAssignees(
+          existing.id,
+          { status: "cancelled" },
+          transaction,
+        );
+        await this.repository.createActivity(
+          {
+            work_task_id: existing.id,
+            action_type: "cancelled",
+            from_status: existing.status,
+            to_status: "cancelled",
+            remarks: `Reminder occurrence no longer matches task #${task.id}.`,
+            actor_employee_id: null,
+            actor_name: "System",
+            metadata_json: { source_task_id: task.id },
+          },
+          transaction,
+        );
+      }
+    }
+
+    for (const occurrenceAt of occurrences) {
+      const entityId = getReminderOccurrenceEntityId(task.id, occurrenceAt);
+      const assignees = (task.assignees || []).map((assignee) => ({
+        assigned_to_employee_id: assignee.assigned_to_employee_id,
+        assigned_to_name: assignee.assigned_to_name,
+      }));
+
+      await this.createOrUpdateSystemTask(
+        {
+          title: `Reminder: ${task.title}`,
+          description: [
+            `Reminder generated from task #${task.id}.`,
+            task.description,
+          ]
+            .filter(Boolean)
+            .join(" "),
+          origin_type: "system",
+          origin_label: "System Reminder",
+          system_rule_code: REMINDER_OCCURRENCE_RULE_CODE,
+          module_key: task.module_key,
+          entity_type: REMINDER_OCCURRENCE_ENTITY_TYPE,
+          entity_id: entityId,
+          linked_reference: task.linked_reference || task.title,
+          linked_url: task.linked_url,
+          due_at: occurrenceAt,
+          reminder_at: null,
+          reminder_sound: task.reminder_sound || "soft_bell",
+          reminder_frequency: "once",
+          priority: task.priority || "medium",
+          assignees,
+          created_by_employee_id: task.created_by_employee_id,
+          created_by_name: task.created_by_name,
+          assigned_by_employee_id: task.assigned_by_employee_id,
+          assigned_by_name: task.assigned_by_name || "System",
+        },
+        transaction,
+      );
+    }
+  }
+
   async createTask(payload = {}, actor = {}) {
     const taskPayload = this.normalizeTaskPayload(payload, actor);
     const assignees = this.normalizeAssignees(payload, actor);
@@ -383,6 +513,8 @@ class WorkTaskService {
         transaction,
       );
 
+      const createdTask = await this.repository.findTaskById(task.id, transaction);
+      await this.syncReminderOccurrenceTasksForTask(createdTask, transaction);
       return this.repository.findTaskById(task.id, transaction);
     });
   }
@@ -532,6 +664,8 @@ class WorkTaskService {
         transaction,
       );
 
+      const updatedTask = await this.repository.findTaskById(task.id, transaction);
+      await this.syncReminderOccurrenceTasksForTask(updatedTask, transaction);
       return this.repository.findTaskById(task.id, transaction);
     });
   }
@@ -641,9 +775,13 @@ class WorkTaskService {
             },
             transaction,
           );
+          const recurringTask = await this.repository.findTaskById(nextTask.id, transaction);
+          await this.syncReminderOccurrenceTasksForTask(recurringTask, transaction);
         }
       }
 
+      const updatedTask = await this.repository.findTaskById(task.id, transaction);
+      await this.syncReminderOccurrenceTasksForTask(updatedTask, transaction);
       return this.repository.findTaskById(task.id, transaction);
     });
   }
@@ -702,6 +840,8 @@ class WorkTaskService {
         transaction,
       );
 
+      const updatedTask = await this.repository.findTaskById(task.id, transaction);
+      await this.syncReminderOccurrenceTasksForTask(updatedTask, transaction);
       return this.repository.findTaskById(task.id, transaction);
     });
   }
@@ -742,6 +882,8 @@ class WorkTaskService {
         transaction,
       );
 
+      const updatedTask = await this.repository.findTaskById(task.id, transaction);
+      await this.syncReminderOccurrenceTasksForTask(updatedTask, transaction);
       return this.repository.findTaskById(task.id, transaction);
     });
   }
@@ -994,13 +1136,19 @@ class WorkTaskService {
           linked_reference: payload.linked_reference,
           linked_url: payload.linked_url,
           due_at: payload.due_at,
-          reminder_at: existingTask.reminder_at || payload.reminder_at,
-          reminder_sound: existingTask.reminder_sound || payload.reminder_sound || "soft_bell",
-          reminder_frequency: existingTask.reminder_frequency || payload.reminder_frequency || "once",
+          reminder_at: payload.reminder_at ?? existingTask.reminder_at,
+          reminder_sound: payload.reminder_sound || existingTask.reminder_sound || "soft_bell",
+          reminder_frequency: payload.reminder_frequency || existingTask.reminder_frequency || "once",
           last_activity_at: new Date(),
         },
         transaction,
       );
+      if (payload.assignees || payload.assigned_to_employee_id) {
+        const assignees = this.normalizeAssignees(payload, {});
+        await this.repository.replaceAssignees(existingTask.id, assignees, transaction);
+      }
+      const updatedTask = await this.repository.findTaskById(existingTask.id, transaction);
+      await this.syncReminderOccurrenceTasksForTask(updatedTask, transaction);
       return { task: await this.repository.findTaskById(existingTask.id, transaction), created: false };
     }
 
@@ -1028,6 +1176,8 @@ class WorkTaskService {
       },
       transaction,
     );
+    const createdTask = await this.repository.findTaskById(task.id, transaction);
+    await this.syncReminderOccurrenceTasksForTask(createdTask, transaction);
     return { task: await this.repository.findTaskById(task.id, transaction), created: true };
   }
 
@@ -1042,6 +1192,7 @@ class WorkTaskService {
     linkedUrl,
     dueAt,
     reminderAt,
+    reminderFrequency = "once",
     priority = "high",
     assignee = {},
   }) {
@@ -1058,7 +1209,7 @@ class WorkTaskService {
       linked_url: linkedUrl,
       due_at: dueAt,
       reminder_at: reminderAt,
-      reminder_frequency: "once",
+      reminder_frequency: reminderFrequency,
       priority,
       severity: getSeverityForPriority(priority),
       assigned_to_employee_id: assignee.assigned_to_employee_id,
@@ -1138,6 +1289,69 @@ class WorkTaskService {
             reminderAt: dueAt ? addDays(dueAt, -1) : null,
             priority: "high",
             severity: "urgent",
+            assignee: getSystemAssignee(tender),
+          }),
+        );
+      }
+
+      const priceValidityRows = await Tender.findAll({
+        where: {
+          price_bid_valid_upto: { [Op.between]: [todayOnly, inThirtyDaysOnly] },
+          status: { [Op.notIn]: ["cancelled", "closed"] },
+        },
+        transaction,
+      });
+
+      for (const tender of priceValidityRows) {
+        const reference = getTenderReference(tender);
+        const dueAt = fromDateOnly(tender.price_bid_valid_upto);
+        await saveSystemTask(
+          this.buildSystemTaskPayload({
+            title: `Price validity expiring: ${reference}`,
+            description:
+              "Review bid/price validity and initiate extension or decision before expiry.",
+            systemRuleCode: "price_bid_validity_expiry",
+            moduleKey: "tenders",
+            entityType: "tender",
+            entityId: tender.id,
+            linkedReference: reference,
+            linkedUrl: `/tenders/${tender.id}`,
+            dueAt,
+            reminderAt: dueAt ? addDays(dueAt, -30) : null,
+            reminderFrequency: "every_5_days",
+            priority: "critical",
+            assignee: getSystemAssignee(tender),
+          }),
+        );
+      }
+
+      const technicalValidityRows = await Tender.findAll({
+        where: {
+          technical_bid_validity_applicable: true,
+          technical_bid_valid_upto: { [Op.between]: [todayOnly, inThirtyDaysOnly] },
+          status: { [Op.notIn]: ["cancelled", "closed"] },
+        },
+        transaction,
+      });
+
+      for (const tender of technicalValidityRows) {
+        const reference = getTenderReference(tender);
+        const dueAt = fromDateOnly(tender.technical_bid_valid_upto);
+        await saveSystemTask(
+          this.buildSystemTaskPayload({
+            title: `Technical bid validity expiring: ${reference}`,
+            description:
+              "Review technical bid validity and initiate extension/approval action before expiry.",
+            systemRuleCode: "technical_bid_validity_expiry",
+            moduleKey: "tenders",
+            entityType: "tender",
+            entityId: tender.id,
+            linkedReference: reference,
+            linkedUrl: `/tenders/${tender.id}`,
+            dueAt,
+            reminderAt: dueAt ? addDays(dueAt, -30) : null,
+            reminderFrequency: "every_5_days",
+            priority: "critical",
             assignee: getSystemAssignee(tender),
           }),
         );

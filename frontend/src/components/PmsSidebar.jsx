@@ -7,6 +7,7 @@ import {
   BriefcaseBusiness,
   Building2,
   CalendarCheck2,
+  ChevronLeft,
   ChevronDown,
   ChevronRight,
   ClipboardList,
@@ -192,16 +193,20 @@ const getInitials = (name) => {
 };
 
 const indentInitiatorAllowedPaths = new Set(["/dashboard", "/my-work", "/indents"]);
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "pms_sidebar_collapsed";
 
-function SidebarLink({ item, onNavigate }) {
+function SidebarLink({ item, onNavigate, collapsed = false }) {
   const Icon = item.icon;
 
   return (
     <NavLink
       to={item.path}
       onClick={onNavigate}
+      title={collapsed ? item.label : undefined}
       className={({ isActive }) =>
-        `group flex items-center justify-between rounded-2xl px-3 py-2.5 text-sm transition ${
+        `group flex items-center rounded-2xl text-sm transition ${
+          collapsed ? "justify-center px-2 py-2.5" : "justify-between px-3 py-2.5"
+        } ${
           isActive
             ? "bg-[#0071e3] text-white shadow-[0_14px_30px_-18px_rgba(0,113,227,0.75)]"
             : "text-black/70 hover:bg-white hover:text-[#1d1d1f]"
@@ -209,8 +214,18 @@ function SidebarLink({ item, onNavigate }) {
       }
     >
       {({ isActive }) => (
-        <>
-          <span className="flex min-w-0 items-center gap-3">
+        collapsed ? (
+          <span
+            className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
+              isActive ? "bg-white/18" : "bg-[#f5f5f7] ring-1 ring-black/6"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            <span className="sr-only">{item.label}</span>
+          </span>
+        ) : (
+          <>
+            <span className="flex min-w-0 items-center gap-3">
             <span
               className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${
                 isActive ? "bg-white/18" : "bg-[#f5f5f7] ring-1 ring-black/6"
@@ -229,13 +244,14 @@ function SidebarLink({ item, onNavigate }) {
               {item.badge}
             </span>
           ) : null}
-        </>
+          </>
+        )
       )}
     </NavLink>
   );
 }
 
-function SidebarContent({ onNavigate }) {
+function SidebarContent({ onNavigate, collapsed = false, onToggle }) {
   const location = useLocation();
   const [roles] = useState(() => getCurrentUserRoles());
   const [expanded, setExpanded] = useState(() => pathToSection(location.pathname));
@@ -265,7 +281,18 @@ function SidebarContent({ onNavigate }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="p-4">
+      <div className={collapsed ? "p-2.5" : "p-4"}>
+        <div className={`flex ${collapsed ? "mb-2 justify-center" : "mb-3 justify-end"}`}>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="grid h-9 w-9 place-items-center rounded-xl border border-black/8 bg-white text-black/62 shadow-sm transition hover:bg-[#fbfbfd] hover:text-[#1d1d1f]"
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <Menu className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
+        </div>
         <AccountProfilePopover
           fallbackName={userName}
           fallbackInitials={getInitials(userName)}
@@ -273,42 +300,68 @@ function SidebarContent({ onNavigate }) {
         >
           <button
             type="button"
-            className="w-full rounded-[1.4rem] bg-white p-3 text-left ring-1 ring-black/8 transition hover:bg-[#fbfbfd]"
+            className={`w-full rounded-[1.4rem] bg-white ring-1 ring-black/8 transition hover:bg-[#fbfbfd] ${
+              collapsed ? "grid place-items-center p-2" : "p-3 text-left"
+            }`}
+            title={collapsed ? userName : undefined}
           >
             <div className="flex items-center gap-3">
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[1.1rem] bg-[#0071e3] text-sm font-bold text-white">
                 {getInitials(userName)}
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-[#1d1d1f]">{userName}</p>
-                <p className="truncate text-xs text-black/46">
-                  {roles.length ? roles.map(formatRoleLabel).join(", ") : "Role loading"}
-                </p>
-              </div>
-              <ChevronsUpDown className="h-4 w-4 shrink-0 text-black/34" />
+              {!collapsed ? (
+                <>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[#1d1d1f]">{userName}</p>
+                    <p className="truncate text-xs text-black/46">
+                      {roles.length ? roles.map(formatRoleLabel).join(", ") : "Role loading"}
+                    </p>
+                  </div>
+                  <ChevronsUpDown className="h-4 w-4 shrink-0 text-black/34" />
+                </>
+              ) : null}
             </div>
           </button>
         </AccountProfilePopover>
       </div>
 
-      <div className="sidebar-scroll-hidden min-h-0 flex-1 overflow-y-auto px-3 pb-4">
-        <div className="mb-5 rounded-[1.75rem] border border-black/8 bg-white p-4 text-[#1d1d1f]">
-          <div className="flex items-center gap-3">
+      <div className={`sidebar-scroll-hidden min-h-0 flex-1 ${collapsed ? "overflow-y-auto px-1.5 pb-2" : "overflow-y-auto px-3 pb-4"}`}>
+        <div
+          className={`rounded-[1.75rem] border border-black/8 bg-white text-[#1d1d1f] ${
+            collapsed ? "grid place-items-center p-2" : "p-4"
+          } ${collapsed ? "mb-2" : "mb-5"}`}
+          title={collapsed ? "Procurement Control" : undefined}
+        >
+          <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
             <div className="rounded-[1.15rem] bg-[#f5f5f7] p-3 ring-1 ring-black/6">
               <BriefcaseBusiness className="h-6 w-6" />
             </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-black/38">PMS</p>
-              <p className="text-sm font-semibold">Procurement Control</p>
-            </div>
+            {!collapsed ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-black/38">PMS</p>
+                <p className="text-sm font-semibold">Procurement Control</p>
+              </div>
+            ) : null}
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className={collapsed ? "space-y-2" : "space-y-3"}>
           {visibleGroups.map((group) => {
             const isOpen = expanded === group.title;
 
-            return (
+            return collapsed ? (
+              <section
+                key={group.title}
+                className="rounded-[1.35rem] bg-white p-1 ring-1 ring-black/8"
+                title={group.title}
+              >
+                <div className="space-y-1">
+                  {group.items.map((item) => (
+                    <SidebarLink key={item.path} item={item} onNavigate={onNavigate} collapsed />
+                  ))}
+                </div>
+              </section>
+            ) : (
               <section
                 key={group.title}
                 className="rounded-[1.55rem] bg-white p-2 ring-1 ring-black/8"
@@ -343,8 +396,8 @@ function SidebarContent({ onNavigate }) {
           })}
 
           {!visibleGroups.length ? (
-            <div className="rounded-2xl border border-black/8 bg-white p-4 text-sm text-black/58">
-              No sidebar options are available for your role.
+            <div className={`rounded-2xl border border-black/8 bg-white text-sm text-black/58 ${collapsed ? "p-2 text-center" : "p-4"}`}>
+              {collapsed ? "NA" : "No sidebar options are available for your role."}
             </div>
           ) : null}
         </div>
@@ -356,6 +409,14 @@ function SidebarContent({ onNavigate }) {
 export default function PmsSidebar() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
+  });
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(desktopCollapsed));
+  }, [desktopCollapsed]);
 
   const handleLogout = () => {
     localStorage.removeItem("fullname");
@@ -366,19 +427,29 @@ export default function PmsSidebar() {
 
   return (
     <>
-      <aside className="hidden h-full min-h-0 w-[18rem] shrink-0 flex-col overflow-hidden border-r border-black/8 bg-[#f5f5f7] md:flex">
+      <aside
+        className={`hidden h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-black/8 bg-[#f5f5f7] md:flex ${
+          desktopCollapsed ? "w-[5.5rem]" : "w-[18rem]"
+        }`}
+      >
         <div className="min-h-0 flex-1">
-          <SidebarContent />
+          <SidebarContent
+            collapsed={desktopCollapsed}
+            onToggle={() => setDesktopCollapsed((current) => !current)}
+          />
         </div>
         <div className="border-t border-black/8 p-3">
           <Button
             type="button"
             variant="ghost"
-            className="w-full justify-start gap-3 rounded-2xl text-black/70 hover:bg-white hover:text-[#1d1d1f]"
+            className={`w-full rounded-2xl text-black/70 hover:bg-white hover:text-[#1d1d1f] ${
+              desktopCollapsed ? "justify-center px-0" : "justify-start gap-3"
+            }`}
             onClick={handleLogout}
+            title={desktopCollapsed ? "Logout" : undefined}
           >
             <LogOut className="h-4 w-4" />
-            Logout
+            {desktopCollapsed ? <span className="sr-only">Logout</span> : "Logout"}
           </Button>
         </div>
       </aside>

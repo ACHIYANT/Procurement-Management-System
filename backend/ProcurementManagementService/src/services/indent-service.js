@@ -33,6 +33,12 @@ const INDENT_SORT_FIELDS = [
   "status",
   "location_scope",
 ];
+const ADMINISTRATIVE_APPROVAL_THRESHOLD = 10000000;
+const ADMINISTRATIVE_APPROVAL_STATUSES = new Set([
+  "required",
+  "not_required",
+  "auto_required",
+]);
 
 class IndentService {
   constructor() {
@@ -45,6 +51,24 @@ class IndentService {
     if (["yes", "true", "1"].includes(normalized)) return true;
     if (["no", "false", "0", ""].includes(normalized)) return false;
     return Boolean(value);
+  }
+
+  normalizeAdministrativeApprovalStatus(item = {}) {
+    const estimatedAmount = asAmountNumber(
+      item?.estimated_amount ?? item?.estimated_value ?? item?.item_value,
+    );
+    if (estimatedAmount >= ADMINISTRATIVE_APPROVAL_THRESHOLD) {
+      return "auto_required";
+    }
+
+    const requestedStatus = normalizeText(item?.administrative_approval_status);
+    if (ADMINISTRATIVE_APPROVAL_STATUSES.has(requestedStatus)) {
+      return requestedStatus === "auto_required" ? "required" : requestedStatus;
+    }
+
+    return this.normalizeYesNoBoolean(item?.administrative_approval_required)
+      ? "required"
+      : "not_required";
   }
 
   normalizeRoleNames(value) {
@@ -212,7 +236,10 @@ class IndentService {
         specification: normalizeNullableText(item?.specification),
         specific_make_required: this.normalizeYesNoBoolean(item?.specific_make_required),
         preferred_make: normalizeNullableText(item?.preferred_make),
-        administrative_approval_required: this.normalizeYesNoBoolean(item?.specific_make_required) || this.normalizeYesNoBoolean(item?.administrative_approval_required),
+        administrative_approval_status:
+          this.normalizeAdministrativeApprovalStatus(item),
+        administrative_approval_required:
+          this.normalizeAdministrativeApprovalStatus(item) !== "not_required",
         administrative_approval_document_path: normalizeNullableText(item?.administrative_approval_document_path),
         remarks: normalizeNullableText(item?.remarks),
       }))
@@ -307,6 +334,7 @@ class IndentService {
       estimated_amount: null,
       preferred_make: item.preferred_make,
       administrative_approval_required: item.administrative_approval_required,
+      administrative_approval_status: item.administrative_approval_status,
       administrative_approval_document_path: null,
       assigned_procurement_officer_id: null,
       assigned_at: null,
@@ -333,6 +361,7 @@ class IndentService {
       specific_make_required: item.specific_make_required,
       preferred_make: item.preferred_make,
       administrative_approval_required: item.administrative_approval_required,
+      administrative_approval_status: item.administrative_approval_status,
       remarks: item.remarks,
       updated_by: updaterId,
     };
@@ -748,6 +777,9 @@ class IndentService {
       document_type: normalizeText(payload.document_type) || "supporting_document",
       document_title: normalizeNullableText(payload.document_title),
       document_path: documentPath,
+      communication_direction: normalizeNullableText(payload.communication_direction),
+      reference_no: normalizeNullableText(payload.reference_no),
+      reference_date: normalizeNullableDate(payload.reference_date),
       remarks: normalizeNullableText(payload.remarks),
       uploaded_by: actor?.id || null,
     });
@@ -913,11 +945,20 @@ class IndentService {
     if (!estimatedAmount || estimatedAmount <= 0) {
       estimatedAmount = Number((asAmountNumber(targetItem.quantity) * asAmountNumber(estimatedRate)).toFixed(2));
     }
+    const administrativeApprovalStatus =
+      estimatedAmount >= ADMINISTRATIVE_APPROVAL_THRESHOLD
+        ? "auto_required"
+        : targetItem.administrative_approval_status || (
+            targetItem.administrative_approval_required ? "required" : "not_required"
+          );
 
     await this.repository.withTransaction(async (transaction) => {
       await this.repository.updateIndentItem(targetItem, {
         estimated_rate: estimatedRate,
         estimated_amount: estimatedAmount,
+        administrative_approval_required:
+          administrativeApprovalStatus !== "not_required",
+        administrative_approval_status: administrativeApprovalStatus,
         estimated_by_procurement_officer_id: actor.id,
         estimated_at: new Date(),
         remarks: normalizeNullableText(payload.remarks || targetItem.remarks),

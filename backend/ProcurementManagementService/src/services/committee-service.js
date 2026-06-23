@@ -80,7 +80,38 @@ const ONE_TIME_TENDER_PURPOSES = new Set([
   "final_evaluation_technical",
   "financial_evaluation_commercial",
 ]);
-const buildCommitteeMeetingNo = (id) => `CM-${String(id).padStart(6, "0")}`;
+
+const MEETING_PREFIX_BY_PURPOSE = {
+  technical_evaluation_stage: "TCM",
+  final_evaluation_technical: "TCM",
+  financial_evaluation_commercial: "PCM",
+  negotiation: "NCM",
+  pre_opening_of_tender: "BOC",
+  specification_terms_conditions_issue: "SCM",
+};
+
+const MEETING_PREFIX_BY_TYPE = {
+  specification_finalization: "SCM",
+  bid_opening_committee: "BOC",
+  indent_examination_committee: "IEC",
+  technical_committee: "TCM",
+  technical_committee_inspection: "TCM",
+  contractual_compliance_committee: "CCC",
+  legal_audit_committee: "LAC",
+  purchase_committee: "PCM",
+  purchase_committee_lower: "PCM",
+  purchase_committee_upper: "PCM",
+  dhppc: "DHPPC",
+  hppc: "HPPC",
+};
+
+const getCommitteeMeetingPrefix = (meetingType, purpose) =>
+  MEETING_PREFIX_BY_PURPOSE[purpose] ||
+  MEETING_PREFIX_BY_TYPE[meetingType] ||
+  "CM";
+
+const buildCommitteeMeetingNo = (id, { meetingType, purpose } = {}) =>
+  `${getCommitteeMeetingPrefix(meetingType, purpose)}-${String(id).padStart(6, "0")}`;
 
 const assertAllowed = (value, allowed, label) => {
   if (value && !allowed.has(value)) {
@@ -366,7 +397,7 @@ class CommitteeService {
         {
           procurement_case_id: procurementCaseId,
           tender_id: tenderId,
-          meeting_no: `PENDING-CM-${Date.now()}`,
+          meeting_no: `PENDING-${getCommitteeMeetingPrefix(meetingType, purpose)}-${Date.now()}`,
           meeting_type: meetingType,
           purpose: purpose || null,
           approval_forum: approvalForum,
@@ -385,7 +416,7 @@ class CommitteeService {
       );
 
       await meeting.update(
-        { meeting_no: buildCommitteeMeetingNo(meeting.id) },
+        { meeting_no: buildCommitteeMeetingNo(meeting.id, { meetingType, purpose }) },
         { transaction },
       );
 

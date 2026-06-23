@@ -107,6 +107,7 @@ const buildCommercialItemQuotes = (vendor, tenderItems = []) => {
   const savedQuotes = Array.isArray(vendor?.commercial_item_quotes)
     ? vendor.commercial_item_quotes
     : [];
+  const isSingleItemTender = tenderItems.length === 1;
   const savedQuoteByItemId = new Map(
     savedQuotes.map((quote) => [Number(quote.tender_item_id), quote]),
   );
@@ -117,9 +118,19 @@ const buildCommercialItemQuotes = (vendor, tenderItems = []) => {
       tender_item_id: item.id,
       quoted_amount: savedQuote?.quoted_amount
         ? String(savedQuote.quoted_amount)
-        : "",
+        : isSingleItemTender && vendor?.final_quoted_amount
+          ? String(vendor.final_quoted_amount)
+          : "",
       negotiated_amount: savedQuote?.negotiated_amount
         ? String(savedQuote.negotiated_amount)
+        : isSingleItemTender && vendor?.negotiated_amount
+          ? String(vendor.negotiated_amount)
+          : "",
+      pre_ra_amount: savedQuote?.pre_ra_amount
+        ? String(savedQuote.pre_ra_amount)
+        : "",
+      post_ra_amount: savedQuote?.post_ra_amount
+        ? String(savedQuote.post_ra_amount)
         : "",
       loa_allocated_quantity: savedQuote?.loa_allocated_quantity
         ? normalizeNumericInputValue(savedQuote.loa_allocated_quantity)
@@ -247,6 +258,16 @@ const initialPbgReceiptForm = {
   remarks: "",
 };
 
+const initialTenderMetaForm = {
+  price_bid_valid_upto: "",
+  technical_bid_validity_applicable: false,
+  technical_bid_valid_upto: "",
+  portal_ra_no: "",
+  ra_start_at: "",
+  ra_end_at: "",
+  ra_remarks: "",
+};
+
 const technicalStatusOptions = [
   { value: "pending", label: "Pending" },
   { value: "qualified", label: "Qualified" },
@@ -292,6 +313,19 @@ const toDateTimeLocalValue = (value) => {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
+const buildTenderMetaForm = (nextTender = {}) => ({
+  price_bid_valid_upto: nextTender?.price_bid_valid_upto || "",
+  technical_bid_validity_applicable: Boolean(
+    nextTender?.technical_bid_validity_applicable ||
+      nextTender?.technical_bid_valid_upto,
+  ),
+  technical_bid_valid_upto: nextTender?.technical_bid_valid_upto || "",
+  portal_ra_no: nextTender?.portal_ra_no || "",
+  ra_start_at: toDateTimeLocalValue(nextTender?.ra_start_at),
+  ra_end_at: toDateTimeLocalValue(nextTender?.ra_end_at),
+  ra_remarks: nextTender?.ra_remarks || "",
+});
+
 const parseTenderDeadline = (value) => {
   if (!value) return null;
   const text = String(value);
@@ -326,6 +360,39 @@ const getEffectiveDeadline = (tender) =>
   parseTenderDeadline(
     tender?.current_submission_deadline || tender?.bid_submission_date,
   );
+
+const stepStatusMeta = (status) => {
+  if (status === "completed") {
+    return {
+      label: "Completed",
+      tone: "text-emerald-700",
+      pill: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+      dot: "bg-emerald-500",
+    };
+  }
+  if (status === "available") {
+    return {
+      label: "Open",
+      tone: "text-amber-700",
+      pill: "bg-amber-50 text-amber-700 ring-amber-100",
+      dot: "bg-amber-500",
+    };
+  }
+  if (status === "locked") {
+    return {
+      label: "Locked",
+      tone: "text-slate-400",
+      pill: "bg-slate-100 text-slate-400 ring-slate-200",
+      dot: "bg-slate-300",
+    };
+  }
+  return {
+    label: "Current",
+    tone: "text-blue-700",
+    pill: "bg-blue-50 text-blue-700 ring-blue-100",
+    dot: "bg-blue-600",
+  };
+};
 
 const iconForStep = (status) => {
   if (status === "completed")
@@ -382,6 +449,7 @@ export default function TenderDetail() {
   const [technicalForms, setTechnicalForms] = useState({});
   const [commercialForms, setCommercialForms] = useState({});
   const [negotiationForms, setNegotiationForms] = useState({});
+  const [tenderMetaForm, setTenderMetaForm] = useState(initialTenderMetaForm);
   const [allocationBasis, setAllocationBasis] = useState("quantity");
   const [allocationScope, setAllocationScope] = useState("overall");
   const [loaRcIssueType, setLoaRcIssueType] = useState("not_issued");
@@ -403,6 +471,7 @@ export default function TenderDetail() {
   const [savingTechnicalVendorId, setSavingTechnicalVendorId] = useState(null);
   const [savingCommercialVendorId, setSavingCommercialVendorId] =
     useState(null);
+  const [savingTenderMeta, setSavingTenderMeta] = useState(false);
   const [savingVendorItemDetailsId, setSavingVendorItemDetailsId] =
     useState(null);
   const [savingNegotiationVendorId, setSavingNegotiationVendorId] =
@@ -415,6 +484,8 @@ export default function TenderDetail() {
   const [savingPbgReceipt, setSavingPbgReceipt] = useState(false);
   const [deletingVendorId, setDeletingVendorId] = useState(null);
   const [openVendorItemEditors, setOpenVendorItemEditors] = useState({});
+  const [isCommercialConsoleOpen, setIsCommercialConsoleOpen] = useState(false);
+  const [isRaConsoleOpen, setIsRaConsoleOpen] = useState(false);
   const [popup, setPopup] = useState({
     open: false,
     type: "info",
@@ -463,6 +534,8 @@ export default function TenderDetail() {
             final_quoted_amount: vendor.final_quoted_amount
               ? String(vendor.final_quoted_amount)
               : "",
+            commercial_bid_document_path:
+              vendor.commercial_bid_document_path || "",
             commercial_item_quotes: buildCommercialItemQuotes(
               vendor,
               nextTenderItems,
@@ -563,6 +636,7 @@ export default function TenderDetail() {
       setLoading(true);
       const data = await procurementRequest(`/tenders/${id}`);
       setTender(data);
+      setTenderMetaForm(buildTenderMetaForm(data));
       hydrateVendorForms(data);
     } catch (error) {
       setPopup({
@@ -605,6 +679,9 @@ export default function TenderDetail() {
     [tender],
   );
   const vendors = Array.isArray(tender?.vendors) ? tender.vendors : [];
+  const isGemTender = ["gem", "gem_nic_split"].includes(
+    String(tender?.portal_type || "").toLowerCase(),
+  );
   const committees = Array.isArray(tender?.committee_meetings)
     ? tender.committee_meetings
     : [];
@@ -1362,6 +1439,20 @@ export default function TenderDetail() {
     }));
   };
 
+  const updateTenderMetaField = (field) => (event) => {
+    const value =
+      event.target.type === "checkbox"
+        ? event.target.checked
+        : event.target.value;
+    setTenderMetaForm((current) => {
+      const next = { ...current, [field]: value };
+      if (field === "technical_bid_validity_applicable" && !value) {
+        next.technical_bid_valid_upto = "";
+      }
+      return next;
+    });
+  };
+
   const setCommercialItemQuoteField = (vendorId, tenderItemId, field, value) => {
     setCommercialForms((current) => {
       const vendorForm = current[vendorId] || {};
@@ -1371,6 +1462,37 @@ export default function TenderDetail() {
               ? { ...quote, [field]: value }
               : quote,
           )
+        : [];
+      const totalQuotedAmount = nextItemQuotes.reduce(
+        (sum, quote) => sum + (asPositiveAmount(quote.quoted_amount) || 0),
+        0,
+      );
+
+      return {
+        ...current,
+        [vendorId]: {
+          ...vendorForm,
+          commercial_item_quotes: nextItemQuotes,
+          final_quoted_amount: totalQuotedAmount ? String(totalQuotedAmount) : "",
+        },
+      };
+    });
+  };
+
+  const setCommercialOpeningRate = (vendorId, tenderItemId, value) => {
+    setCommercialForms((current) => {
+      const vendorForm = current[vendorId] || {};
+      const nextItemQuotes = Array.isArray(vendorForm.commercial_item_quotes)
+        ? vendorForm.commercial_item_quotes.map((quote) => {
+            if (Number(quote.tender_item_id) !== Number(tenderItemId)) {
+              return quote;
+            }
+            return {
+              ...quote,
+              quoted_amount: value,
+              pre_ra_amount: isGemTender ? value : quote.pre_ra_amount,
+            };
+          })
         : [];
       const totalQuotedAmount = nextItemQuotes.reduce(
         (sum, quote) => sum + (asPositiveAmount(quote.quoted_amount) || 0),
@@ -1676,6 +1798,48 @@ export default function TenderDetail() {
     }
   };
 
+  const saveTenderMeta = async () => {
+    if (
+      tenderMetaForm.ra_start_at &&
+      tenderMetaForm.ra_end_at &&
+      new Date(tenderMetaForm.ra_end_at) < new Date(tenderMetaForm.ra_start_at)
+    ) {
+      setPopup({
+        open: true,
+        type: "error",
+        message: "RA end date/time cannot be before RA initiation date/time.",
+      });
+      return;
+    }
+
+    setSavingTenderMeta(true);
+    try {
+      const data = await patchProcurement(`/tenders/${id}`, {
+        ...tenderMetaForm,
+        technical_bid_valid_upto:
+          tenderMetaForm.technical_bid_validity_applicable
+            ? tenderMetaForm.technical_bid_valid_upto
+            : "",
+      });
+      setTender(data);
+      setTenderMetaForm(buildTenderMetaForm(data));
+      hydrateVendorForms(data);
+      setPopup({
+        open: true,
+        type: "success",
+        message: "Tender validity and RA details updated.",
+      });
+    } catch (error) {
+      setPopup({
+        open: true,
+        type: "error",
+        message: error.message || "Unable to update tender validity/RA details.",
+      });
+    } finally {
+      setSavingTenderMeta(false);
+    }
+  };
+
   const saveNegotiationReview = async (vendorId) => {
     const payload = negotiationForms[vendorId] || {};
     const itemwiseNegotiatedTotal = (
@@ -1871,6 +2035,16 @@ export default function TenderDetail() {
     formData.append("file", file);
     formData.append("filename_base", `pbg_${tender?.id || id}`);
     return uploadProcurementFile("/files/upload/pbg_document", formData);
+  };
+
+  const uploadCommercialBidDocument = async (vendorId, file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("filename_base", `commercial_bid_${id}_${vendorId}`);
+    return uploadProcurementFile(
+      "/files/upload/commercial_bid_document",
+      formData,
+    );
   };
 
   const uploadAllocationExtensionDocument = async (vendorId, file) => {
@@ -2145,6 +2319,10 @@ export default function TenderDetail() {
   const selectedStep =
     steps.find((step) => step.key === selectedStepKey) ||
     steps.find((step) => step.key === currentStepKey);
+  const selectedStepIndex = Math.max(
+    0,
+    steps.findIndex((step) => step.key === selectedStep?.key),
+  );
   const tenderReturnState = (stepKey = selectedStepKey) => ({
     returnTo: `/tenders/${id}`,
     returnLabel: "Back to tender workflow",
@@ -2342,26 +2520,40 @@ export default function TenderDetail() {
                 type="number"
                 min="0"
                 value={displayFieldValue}
-                onChange={(event) =>
-                  field === "negotiated_amount"
-                    ? setNegotiationField(
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  const tenderItemId = scopedTenderItems[0]?.id;
+                  if (field === "negotiated_amount") {
+                    setNegotiationField(vendor.id, "negotiated_amount", nextValue);
+                    if (tenderItemId) {
+                      setCommercialItemQuoteField(
                         vendor.id,
+                        tenderItemId,
                         "negotiated_amount",
-                        event.target.value,
-                      )
-                    : field === "quoted_amount"
-                      ? setCommercialField(
-                          vendor.id,
-                          "final_quoted_amount",
-                          event.target.value,
-                        )
-                      : setCommercialItemQuoteField(
-                          vendor.id,
-                          scopedTenderItems[0]?.id,
-                          field,
-                          event.target.value,
-                        )
-                }
+                        nextValue,
+                      );
+                    }
+                    return;
+                  }
+                  if (field === "quoted_amount") {
+                    setCommercialField(vendor.id, "final_quoted_amount", nextValue);
+                    if (tenderItemId) {
+                      setCommercialItemQuoteField(
+                        vendor.id,
+                        tenderItemId,
+                        "quoted_amount",
+                        nextValue,
+                      );
+                    }
+                    return;
+                  }
+                  setCommercialItemQuoteField(
+                    vendor.id,
+                    tenderItemId,
+                    field,
+                    nextValue,
+                  );
+                }}
                 disabled={!canPerformOfficerTenderActions || readOnly}
               />
               {canPerformOfficerTenderActions && onSave && !readOnly ? (
@@ -2467,6 +2659,377 @@ export default function TenderDetail() {
       </div>
     );
   };
+
+  const renderCommercialOpeningVendorCard = (vendor) => {
+    const form = commercialForms[vendor.id] || {};
+    const itemQuotes = Array.isArray(form.commercial_item_quotes)
+      ? form.commercial_item_quotes
+      : [];
+    const quoteByItemId = new Map(
+      itemQuotes.map((quote) => [Number(quote.tender_item_id), quote]),
+    );
+    const rows = tenderItems.map((item, index) => {
+      const quote = quoteByItemId.get(Number(item.id)) || {};
+      const quotedAmount = asPositiveAmount(quote.quoted_amount);
+      return {
+        item,
+        index,
+        quote,
+        quotedAmount,
+      };
+    });
+    const totalQuoted = rows.reduce(
+      (sum, row) => sum + (row.quotedAmount || 0),
+      0,
+    );
+    const isSaving = savingCommercialVendorId === vendor.id;
+
+    return (
+      <div
+        key={`commercial-console-${vendor.id}`}
+        className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_55px_-44px_rgba(15,23,42,0.45)]"
+      >
+        <div className="flex flex-col gap-4 border-b border-slate-100 bg-gradient-to-r from-white via-white to-sky-50/80 px-4 py-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate text-base font-semibold tracking-[-0.02em] text-slate-950">
+                {vendor?.firm?.firm_name || "NA"}
+              </p>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                Commercial opening
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Record bidder status, commercial bid copy, and item-wise quoted
+              rates exclusive of GST.
+            </p>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-[14rem_11rem_auto] sm:items-center">
+            <select
+              className={compactSelectClass}
+              value={form.commercial_status || "pending"}
+              onChange={(event) =>
+                setCommercialField(
+                  vendor.id,
+                  "commercial_status",
+                  event.target.value,
+                )
+              }
+              disabled={!canPerformOfficerTenderActions}
+            >
+              {commercialStatusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <div className="rounded-[18px] bg-white px-3 py-2 text-right ring-1 ring-slate-200">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Quoted Total
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-950">
+                {totalQuoted ? money(totalQuoted) : "Pending"}
+              </p>
+            </div>
+            <Button
+              type="button"
+              className={primaryButtonClass}
+              disabled={isSaving || !canPerformOfficerTenderActions}
+              onClick={() => saveCommercialReview(vendor.id)}
+            >
+              {isSaving ? "Saving..." : "Save Review"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-[880px] w-full text-left text-sm">
+            <thead className="bg-slate-50 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Item</th>
+                <th className="px-4 py-3">Make / Model</th>
+                <th className="px-4 py-3">Quoted Price Exclusive of GST</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map(({ item, index, quote }) => (
+                <tr
+                  key={`commercial-console-row-${vendor.id}-${item.id}`}
+                  className="align-top"
+                >
+                  <td className="px-4 py-3">
+                    <p className="font-semibold text-slate-950">
+                      {getTenderItemDisplayName(item, index)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {item?.indent_item?.item_name || `Item ${index + 1}`}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="min-w-[13rem] rounded-[18px] bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {[quote.make, quote.model].filter(Boolean).join(" / ") ||
+                          "Not recorded"}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        View-only here. Edit make/model in technical
+                        evaluation.
+                      </p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Input
+                      type="number"
+                      min="0"
+                      value={quote.quoted_amount || ""}
+                      onChange={(event) =>
+                        setCommercialOpeningRate(
+                          vendor.id,
+                          item.id,
+                          event.target.value,
+                        )
+                      }
+                      disabled={!canPerformOfficerTenderActions}
+                      placeholder="Quoted price"
+                      className="h-10 min-w-[12rem] rounded-2xl"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="grid gap-3 border-t border-slate-100 bg-slate-50/70 px-4 py-4 lg:grid-cols-[1fr_auto_auto] lg:items-end">
+          <FileAttachmentField
+            label="Commercial Bid Copy"
+            storedPath={form.commercial_bid_document_path || ""}
+            onChange={(value) =>
+              setCommercialField(
+                vendor.id,
+                "commercial_bid_document_path",
+                value,
+              )
+            }
+            onUpload={(file) => uploadCommercialBidDocument(vendor.id, file)}
+            readOnly={!canPerformOfficerTenderActions}
+            allowReplace={canPerformOfficerTenderActions}
+            allowClear={canPerformOfficerTenderActions}
+            helperText="Upload bidder submitted commercial bid."
+          />
+          {financialEvaluationCommercialMeeting?.proceedings_document_path ? (
+            <Button asChild variant="outline" className="rounded-full">
+              <a
+                href={toProcurementFileViewUrl(
+                  financialEvaluationCommercialMeeting.proceedings_document_path,
+                )}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Eye className="h-4 w-4" />
+                View Minutes
+              </a>
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" className="rounded-full" disabled>
+              Minutes Pending
+            </Button>
+          )}
+          <Button
+            type="button"
+            className={primaryButtonClass}
+            disabled={isSaving || !canPerformOfficerTenderActions}
+            onClick={() => saveCommercialReview(vendor.id)}
+          >
+            {isSaving ? "Saving..." : "Save Bidder"}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderReverseAuctionVendorCard = (vendor) => {
+    const form = commercialForms[vendor.id] || {};
+    const itemQuotes = Array.isArray(form.commercial_item_quotes)
+      ? form.commercial_item_quotes
+      : [];
+    const quoteByItemId = new Map(
+      itemQuotes.map((quote) => [Number(quote.tender_item_id), quote]),
+    );
+    const rows = tenderItems.map((item, index) => {
+      const quote = quoteByItemId.get(Number(item.id)) || {};
+      const beforeAmount = asPositiveAmount(
+        quote.pre_ra_amount || quote.quoted_amount,
+      );
+      const afterAmount = asPositiveAmount(quote.post_ra_amount);
+      return {
+        item,
+        index,
+        quote,
+        beforeAmount,
+        afterAmount,
+        reduction:
+          beforeAmount && afterAmount ? beforeAmount - afterAmount : null,
+      };
+    });
+    const totalBefore = rows.reduce(
+      (sum, row) => sum + (row.beforeAmount || 0),
+      0,
+    );
+    const totalAfter = rows.reduce(
+      (sum, row) => sum + (row.afterAmount || 0),
+      0,
+    );
+    const totalReduction =
+      totalBefore && totalAfter ? totalBefore - totalAfter : null;
+    const saveDisabled =
+      savingCommercialVendorId === vendor.id ||
+      !canPerformOfficerTenderActions;
+
+    return (
+      <div
+        key={`ra-${vendor.id}`}
+        className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_55px_-44px_rgba(15,23,42,0.45)]"
+      >
+        <div className="flex flex-col gap-4 border-b border-slate-100 bg-gradient-to-r from-white via-white to-orange-50/70 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate text-base font-semibold tracking-[-0.02em] text-slate-950">
+                {vendor?.firm?.firm_name || "NA"}
+              </p>
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100">
+                Commercial bidder
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Before RA is taken from commercial opening; enter only the
+              after-RA rate here.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:min-w-[28rem]">
+            {[
+              ["Before RA", totalBefore ? money(totalBefore) : "Pending"],
+              ["After RA", totalAfter ? money(totalAfter) : "Pending"],
+              [
+                "Reduction",
+                totalReduction === null
+                  ? "Pending"
+                  : totalReduction > 0
+                    ? money(totalReduction)
+                    : "No reduction",
+              ],
+            ].map(([title, value]) => (
+              <div
+                key={title}
+                className="rounded-[18px] bg-white/80 px-3 py-2 text-right ring-1 ring-slate-200"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  {title}
+                </p>
+                <p
+                  className={`mt-1 text-sm font-semibold ${
+                    title === "Reduction" && totalReduction > 0
+                      ? "text-emerald-700"
+                      : "text-slate-900"
+                  }`}
+                >
+                  {value}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-[780px] w-full text-left text-sm">
+            <thead className="bg-slate-50 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Item</th>
+                <th className="px-4 py-3">Before RA Rate</th>
+                <th className="px-4 py-3">After RA Rate</th>
+                <th className="px-4 py-3">Item Reduction</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map(({ item, index, quote, beforeAmount, reduction }) => (
+                <tr key={`ra-row-${vendor.id}-${item.id}`} className="align-top">
+                  <td className="px-4 py-3">
+                    <p className="font-semibold text-slate-950">
+                      {getTenderItemDisplayName(item, index)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {item?.indent_item?.item_name || `Item ${index + 1}`}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="min-w-[11rem] rounded-[18px] bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                      <p className="text-sm font-semibold text-slate-950">
+                        {beforeAmount ? money(beforeAmount) : "Pending"}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        From commercial quote
+                      </p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Input
+                      type="number"
+                      min="0"
+                      value={quote.post_ra_amount || ""}
+                      onChange={(event) =>
+                        setCommercialItemQuoteField(
+                          vendor.id,
+                          item.id,
+                          "post_ra_amount",
+                          event.target.value,
+                        )
+                      }
+                      disabled={!canPerformOfficerTenderActions}
+                      placeholder="After RA"
+                      className="h-10 min-w-[11rem] rounded-2xl"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                        reduction === null
+                          ? "bg-slate-100 text-slate-500"
+                          : reduction > 0
+                            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
+                            : "bg-amber-50 text-amber-700 ring-1 ring-amber-100"
+                      }`}
+                    >
+                      {reduction === null
+                        ? "Pending"
+                        : reduction > 0
+                          ? money(reduction)
+                          : "No reduction"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-slate-500">
+            Save after entering this bidder&apos;s after-RA item rates.
+          </p>
+          <Button
+            type="button"
+            className={primaryButtonClass}
+            disabled={saveDisabled}
+            onClick={() => saveCommercialReview(vendor.id)}
+          >
+            {savingCommercialVendorId === vendor.id ? "Saving..." : "Save RA Rates"}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   const isLoaRcIssued = ["loa_issued", "rc_issued"].includes(loaRcIssueType);
   const loaRcDateLabel =
     loaRcIssueType === "rc_issued" ? "RC Date" : "LOA Date";
@@ -2559,55 +3122,69 @@ export default function TenderDetail() {
   );
 
   const renderCommitteeMeetingPanel = ({ title, description }) => (
-    <details className="group space-y-4 rounded-[24px] bg-white p-3 ring-1 ring-black/8">
+    <details className="group overflow-hidden rounded-[34px] border border-slate-100 bg-white shadow-[0_26px_80px_-56px_rgba(15,23,42,0.55)]">
       <summary
-        className={`flex cursor-pointer list-none flex-col gap-3 [&::-webkit-details-marker]:hidden md:flex-row md:items-center md:justify-between ${mutedPanelClass}`}
+        className="relative flex cursor-pointer list-none flex-col gap-4 overflow-hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,#eef5ff,transparent_34%),linear-gradient(135deg,#f8fbff,#ffffff_48%,#f8fbff)] px-5 py-5 text-left [&::-webkit-details-marker]:hidden lg:flex-row lg:items-start lg:justify-between"
       >
-        <div className="flex items-start gap-3">
-          <span className="mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/8 bg-white text-black/54 transition-colors group-open:bg-[#0071e3]/8 group-open:text-[#0071e3]">
+        <div className="absolute right-[-5rem] top-[-7rem] h-56 w-56 rounded-full bg-sky-200/30 blur-3xl" />
+        <div className="relative max-w-3xl">
+          <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-blue-700 ring-1 ring-blue-100">
+            Committee Console
+          </span>
+          <h3 className="mt-3 text-xl font-semibold tracking-[-0.035em] text-[#1d1d1f]">
+            {title}
+          </h3>
+          <p className="mt-1.5 text-sm leading-6 text-slate-600">
+            {description ||
+              "View or add committee meetings linked with this tender."}
+          </p>
+          <span className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+            {committees.length} meeting
+            {committees.length === 1 ? "" : "s"} recorded
+          </span>
+        </div>
+        <div className="relative flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap lg:flex-col lg:items-end">
+          <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
+            <span className="group-open:hidden">Open</span>
+            <span className="hidden group-open:inline">Collapse</span>
             <ChevronDown className="h-4 w-4 transition-transform duration-200 group-open:rotate-180" />
           </span>
-          <div>
-          <h3 className="text-lg font-semibold text-[#1d1d1f]">{title}</h3>
-          <p className="text-sm text-black/56">
-            Click to view/add committee meetings. Meetings recorded for this tender: {committees.length}
-          </p>
-          {description ? (
-            <p className="mt-1 text-xs text-black/45">{description}</p>
-          ) : null}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2" onClick={(event) => event.preventDefault()}>
-          <Button
-            type="button"
-            variant="outline"
-            className={lightButtonClass}
-            onClick={() =>
-              navigate(
-                `/committees?procurementCaseId=${tender?.procurement_case_id || ""}&tenderId=${tender?.id}`,
-              )
-            }
+          <div
+            className="flex flex-wrap gap-2 lg:justify-end"
+            onClick={(event) => event.preventDefault()}
           >
-            View Committees
-          </Button>
-          {canPerformOfficerTenderActions ? (
             <Button
               type="button"
-              className={primaryButtonClass}
+              variant="outline"
+              className={lightButtonClass}
               onClick={() =>
                 navigate(
-                  `/committees/new?procurementCaseId=${tender?.procurement_case_id || ""}&tenderId=${tender?.id}`,
+                  `/committees?procurementCaseId=${tender?.procurement_case_id || ""}&tenderId=${tender?.id}`,
                 )
               }
             >
-              Add Committee Meeting
+              View Committees
             </Button>
-          ) : null}
+            {canPerformOfficerTenderActions ? (
+              <Button
+                type="button"
+                className={primaryButtonClass}
+                onClick={() =>
+                  navigate(
+                    `/committees/new?procurementCaseId=${tender?.procurement_case_id || ""}&tenderId=${tender?.id}`,
+                  )
+                }
+              >
+                Add Committee Meeting
+              </Button>
+            ) : null}
+          </div>
         </div>
       </summary>
 
-      <div className={`${tableShellClass} mt-4`}>
-        <table className="min-w-full text-left text-sm">
+      <div className="bg-[#f8fbff] px-4 py-4">
+        <div className={tableShellClass}>
+          <table className="min-w-full text-left text-sm">
           <thead className={tableHeadClass}>
             <tr>
               <th className="px-4 py-3">Meeting No.</th>
@@ -2678,7 +3255,8 @@ export default function TenderDetail() {
               </tr>
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
     </details>
   );
@@ -2786,7 +3364,7 @@ export default function TenderDetail() {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-[28px] bg-white">
+        <section className="tender-step-shell overflow-hidden rounded-[28px] bg-white">
           <div className="border-b border-black/6 px-6 py-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div>
@@ -2824,63 +3402,111 @@ export default function TenderDetail() {
             </div>
           </div>
 
-          <div className="border-b border-black/6 px-4 py-4 md:px-6">
-            <div className="overflow-x-auto">
-              <div className="inline-flex min-w-full gap-2 rounded-[22px] bg-[#f5f5f7] p-1.5">
-                {steps.map((step, index) => (
-                  <button
-                    key={step.key}
-                    type="button"
-                    onClick={() => {
-                      if (step.status !== "locked") {
-                        setSelectedStepKey(step.key);
-                      }
-                    }}
-                    disabled={step.status === "locked"}
-                    className={`min-w-[15rem] flex-1 rounded-[18px] px-4 py-3 text-left transition ${
-                      selectedStepKey === step.key
-                        ? "bg-white text-[#1d1d1f] shadow-[0_10px_24px_-18px_rgba(0,0,0,0.45)]"
-                        : step.status === "completed"
-                          ? "bg-transparent text-[#1d1d1f]"
-                          : step.status === "available"
-                            ? "bg-transparent text-[#1d1d1f]"
-                            : step.status === "locked"
-                              ? "cursor-not-allowed bg-transparent text-black/34"
-                              : "bg-transparent text-[#1d1d1f] hover:bg-white/70"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-black/38">
-                          Step {index + 1}
-                        </p>
-                        <p className="mt-1 text-[13px] font-semibold tracking-[-0.01em] md:text-sm">
-                          {step.title}
-                        </p>
-                      </div>
-                      <div
-                        className={
-                          selectedStepKey === step.key ? "text-[#0071e3]" : ""
+          <div className="tender-step-rail border-b border-black/6 bg-gradient-to-b from-white via-white to-[#f5f5f7] px-4 py-4 md:px-6">
+            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-black/36">
+                  Workflow Progress
+                </p>
+                <p className="mt-1 text-sm font-medium text-black/58">
+                  Step {selectedStepIndex + 1} of {steps.length} ·{" "}
+                  {stepStatusMeta(selectedStep?.status).label}
+                </p>
+              </div>
+              <div className="tender-step-progress h-1.5 overflow-hidden rounded-full bg-black/8 md:w-64">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#0071e3] to-[#34c759] transition-all"
+                  style={{
+                    width: `${Math.max(
+                      8,
+                      ((selectedStepIndex + 1) / steps.length) * 100,
+                    )}%`,
+                  }}
+                />
+              </div>
+            </div>
+            <div className="overflow-x-auto pb-1">
+              <div className="tender-step-track inline-flex min-w-full gap-3 rounded-[30px] border border-white/80 bg-white/60 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_24px_70px_-58px_rgba(15,23,42,0.8)] backdrop-blur">
+                {steps.map((step, index) => {
+                  const isSelected = selectedStepKey === step.key;
+                  const statusMeta = stepStatusMeta(step.status);
+                  const isLocked = step.status === "locked";
+
+                  return (
+                    <button
+                      key={step.key}
+                      type="button"
+                      onClick={() => {
+                        if (!isLocked) {
+                          setSelectedStepKey(step.key);
                         }
-                      >
-                        {iconForStep(step.status)}
-                      </div>
-                    </div>
-                    <p
-                      className={`mt-2 text-[10px] font-semibold uppercase tracking-[0.2em] ${
-                        selectedStepKey === step.key
-                          ? "text-[#0071e3]"
-                          : "text-black/42"
+                      }}
+                      disabled={isLocked}
+                      className={`tender-step-card group relative min-h-[7.25rem] min-w-[15.5rem] flex-1 overflow-hidden rounded-[24px] border px-4 py-4 text-left transition duration-200 ${
+                        isSelected
+                          ? "tender-step-card-selected border-white bg-white text-[#1d1d1f] shadow-[0_22px_48px_-34px_rgba(15,23,42,0.9)] ring-1 ring-black/5"
+                          : isLocked
+                            ? "tender-step-card-locked cursor-not-allowed border-transparent bg-white/38 text-black/34"
+                            : "tender-step-card-open border-transparent bg-white/42 text-[#1d1d1f] hover:bg-white/82 hover:shadow-[0_16px_38px_-34px_rgba(15,23,42,0.9)]"
                       }`}
                     >
-                      {step.status === "current"
-                        ? "Current Step"
-                        : step.status === "available"
-                          ? "Open"
-                          : step.status}
-                    </p>
-                  </button>
-                ))}
+                      <div
+                        className={`absolute inset-x-4 top-0 h-1 rounded-b-full transition ${
+                          isSelected ? "bg-[#0071e3]" : statusMeta.dot
+                        } ${isLocked ? "opacity-30" : "opacity-80"}`}
+                      />
+                      {isSelected ? (
+                        <div className="absolute -right-10 -top-12 h-32 w-32 rounded-full bg-[#0071e3]/10 blur-2xl" />
+                      ) : null}
+
+                      <div className="relative flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`tender-step-number grid h-7 w-7 place-items-center rounded-full text-[11px] font-semibold ring-1 ${
+                                isSelected
+                                  ? "tender-step-number-selected bg-[#0071e3] text-white ring-[#0071e3]"
+                                  : `${statusMeta.pill}`
+                              }`}
+                            >
+                              {index + 1}
+                            </span>
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-black/38">
+                              Step
+                            </span>
+                          </div>
+                          <p className="mt-3 line-clamp-2 text-[14px] font-semibold leading-5 tracking-[-0.02em] text-[#1d1d1f]">
+                            {step.title}
+                          </p>
+                        </div>
+                        <div
+                          className={`tender-step-icon grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white shadow-sm ring-1 ring-black/8 ${
+                            isSelected ? "text-[#0071e3]" : statusMeta.tone
+                          }`}
+                        >
+                          {iconForStep(step.status)}
+                        </div>
+                      </div>
+
+                      <div className="relative mt-4 flex items-center justify-between gap-3">
+                        <span
+                          className={`tender-step-status inline-flex rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ring-1 ${
+                            isSelected
+                              ? "tender-step-status-selected bg-blue-50 text-[#0071e3] ring-blue-100"
+                              : statusMeta.pill
+                          }`}
+                        >
+                          {statusMeta.label}
+                        </span>
+                        {isSelected ? (
+                          <span className="tender-step-viewing text-[11px] font-semibold text-[#0071e3]">
+                            Viewing
+                          </span>
+                        ) : null}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -3337,148 +3963,273 @@ export default function TenderDetail() {
                   committee meeting.
                 </div>
 
+                <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-38px_rgba(0,0,0,0.35)]">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                        Bid Validity Watch
+                      </p>
+                      <h3 className="mt-1 text-lg font-semibold tracking-[-0.02em] text-slate-950">
+                        Price and technical bid validity
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        My Work will create system alerts within 30 days of
+                        expiry and repeat reminders every 5 days.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      className={primaryButtonClass}
+                      disabled={savingTenderMeta || !canPerformOfficerTenderActions}
+                      onClick={saveTenderMeta}
+                    >
+                      {savingTenderMeta ? "Saving..." : "Save Validity"}
+                    </Button>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Price Valid Upto
+                      </span>
+                      <Input
+                        type="date"
+                        value={tenderMetaForm.price_bid_valid_upto}
+                        onChange={updateTenderMetaField("price_bid_valid_upto")}
+                        disabled={!canPerformOfficerTenderActions}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Technical Validity
+                      </span>
+                      <select
+                        className={compactSelectClass}
+                        value={
+                          tenderMetaForm.technical_bid_validity_applicable
+                            ? "yes"
+                            : "no"
+                        }
+                        onChange={(event) =>
+                          setTenderMetaForm((current) => ({
+                            ...current,
+                            technical_bid_validity_applicable:
+                              event.target.value === "yes",
+                            technical_bid_valid_upto:
+                              event.target.value === "yes"
+                                ? current.technical_bid_valid_upto
+                                : "",
+                          }))
+                        }
+                        disabled={!canPerformOfficerTenderActions}
+                      >
+                        <option value="no">Not applicable</option>
+                        <option value="yes">Applicable</option>
+                      </select>
+                    </label>
+                    {tenderMetaForm.technical_bid_validity_applicable ? (
+                      <label className="space-y-1">
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          Technical Valid Upto
+                        </span>
+                        <Input
+                          type="date"
+                          value={tenderMetaForm.technical_bid_valid_upto}
+                          onChange={updateTenderMetaField(
+                            "technical_bid_valid_upto",
+                          )}
+                          disabled={!canPerformOfficerTenderActions}
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-[34px] border border-sky-100 bg-white shadow-[0_26px_80px_-56px_rgba(15,23,42,0.55)]">
+                  <button
+                    type="button"
+                    className="flex w-full flex-col gap-4 border-b border-sky-100 bg-[radial-gradient(circle_at_top_left,#dff3ff,transparent_34%),linear-gradient(135deg,#f6fbff,#ffffff_48%,#f8fbff)] px-5 py-5 text-left lg:flex-row lg:items-center lg:justify-between"
+                    onClick={() =>
+                      setIsCommercialConsoleOpen((current) => !current)
+                    }
+                  >
+                    <div className="max-w-3xl">
+                      <span className="inline-flex rounded-full bg-sky-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-sky-700 ring-1 ring-sky-200">
+                        Commercial Opening
+                      </span>
+                      <h3 className="mt-3 text-2xl font-semibold tracking-[-0.045em] text-slate-950">
+                        Commercial Evaluation Console
+                      </h3>
+                      <p className="mt-1.5 text-sm leading-6 text-slate-600">
+                        Capture bidder status, item-wise quoted rates, and
+                        commercial bid copy in one focused workspace. For GeM,
+                        quoted rates become the RA before-rate source.
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
+                      {isCommercialConsoleOpen ? "Collapse" : "Open"}
+                      <ChevronDown
+                        className={`h-4 w-4 transition ${
+                          isCommercialConsoleOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </span>
+                  </button>
+                  {isCommercialConsoleOpen ? (
+                    <div className="space-y-4 bg-[#f8fbff] px-4 py-4">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-950">
+                            Bidder commercial matrix
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Item-wise quoted prices are exclusive of GST.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                          {technicalQualifiedVendors.length} bidder
+                          {technicalQualifiedVendors.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      {technicalQualifiedVendors.map((vendor) =>
+                        renderCommercialOpeningVendorCard(vendor),
+                      )}
+                      {!technicalQualifiedVendors.length ? (
+                        <div className="rounded-[24px] border border-dashed border-sky-200 bg-white px-5 py-8 text-center text-sm text-sky-800">
+                          No technically qualified vendor is available for
+                          commercial evaluation yet.
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+
+                {isGemTender ? (
+                  <div className="overflow-hidden rounded-[34px] border border-orange-100 bg-white shadow-[0_26px_80px_-56px_rgba(15,23,42,0.55)]">
+                    <button
+                      type="button"
+                      className="relative flex w-full flex-col gap-4 overflow-hidden border-b border-orange-100 bg-[radial-gradient(circle_at_top_left,#fff1db,transparent_34%),linear-gradient(135deg,#fffaf4,#ffffff_48%,#f8fbff)] px-5 py-5 text-left lg:flex-row lg:items-start lg:justify-between"
+                      onClick={() => setIsRaConsoleOpen((current) => !current)}
+                    >
+                      <div className="absolute right-[-5rem] top-[-7rem] h-56 w-56 rounded-full bg-orange-200/35 blur-3xl" />
+                      <div className="relative max-w-3xl">
+                        <span className="inline-flex rounded-full bg-orange-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-orange-700 ring-1 ring-orange-200">
+                          GeM Reverse Auction
+                        </span>
+                        <h3 className="mt-3 text-2xl font-semibold tracking-[-0.045em] text-slate-950">
+                          Reverse Auction Console
+                        </h3>
+                        <p className="mt-1.5 text-sm leading-6 text-slate-600">
+                          Review before-RA rates from commercial opening, then
+                          capture after-RA item-wise rates and reductions.
+                        </p>
+                      </div>
+                      <span className="relative inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-orange-100">
+                        {isRaConsoleOpen ? "Collapse" : "Open"}
+                        <ChevronDown
+                          className={`h-4 w-4 transition ${
+                            isRaConsoleOpen ? "rotate-180" : ""
+                          }`}
+                        />
+                      </span>
+                    </button>
+                    {isRaConsoleOpen ? (
+                      <>
+                        <div className="grid gap-3 border-b border-orange-100 bg-[#fffaf4] px-5 py-4 md:grid-cols-2 xl:grid-cols-5">
+                          {[
+                            {
+                              label: "RA No.",
+                              field: "portal_ra_no",
+                              placeholder: "GeM RA reference",
+                              type: "text",
+                            },
+                            {
+                              label: "RA Initiation",
+                              field: "ra_start_at",
+                              type: "datetime-local",
+                            },
+                            {
+                              label: "RA End",
+                              field: "ra_end_at",
+                              type: "datetime-local",
+                            },
+                            {
+                              label: "Remarks",
+                              field: "ra_remarks",
+                              placeholder: "Optional note",
+                              type: "text",
+                            },
+                          ].map((field) => (
+                            <label
+                              key={field.field}
+                              className="rounded-[22px] bg-white/90 p-3 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.65)] ring-1 ring-orange-100 backdrop-blur"
+                            >
+                              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-orange-700">
+                                {field.label}
+                              </span>
+                              <Input
+                                type={field.type}
+                                value={tenderMetaForm[field.field]}
+                                onChange={updateTenderMetaField(field.field)}
+                                disabled={!canPerformOfficerTenderActions}
+                                placeholder={field.placeholder}
+                                className="mt-2 h-10 rounded-2xl border-orange-100 bg-white"
+                              />
+                            </label>
+                          ))}
+                          <div className="flex items-end">
+                            <Button
+                              type="button"
+                              className={`${primaryButtonClass} w-full shadow-[0_14px_35px_-20px_rgba(37,99,235,0.8)]`}
+                              disabled={
+                                savingTenderMeta ||
+                                !canPerformOfficerTenderActions
+                              }
+                              onClick={saveTenderMeta}
+                            >
+                              {savingTenderMeta ? "Saving..." : "Save Schedule"}
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4 bg-[#fbfaf8] px-4 py-4">
+                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-950">
+                                Bidder RA rate matrix
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                Inline entry, visible totals, and reduction
+                                check for quick review.
+                              </p>
+                            </div>
+                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                              {technicalQualifiedVendors.length} bidder
+                              {technicalQualifiedVendors.length === 1
+                                ? ""
+                                : "s"}
+                            </span>
+                          </div>
+
+                          {technicalQualifiedVendors.map((vendor) =>
+                            renderReverseAuctionVendorCard(vendor),
+                          )}
+                          {!technicalQualifiedVendors.length ? (
+                            <div className="rounded-[24px] border border-dashed border-orange-200 bg-white px-5 py-8 text-center text-sm text-orange-800">
+                              No technically qualified vendor is available for
+                              RA rate capture yet.
+                            </div>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {renderCommitteeMeetingPanel({
                   title: "Commercial Evaluation Committee Meetings",
                   description:
                     "Record financial evaluation, commercial scrutiny, or related committee movement during commercial evaluation.",
                 })}
-
-                <div className={tableShellClass}>
-                  <table className="min-w-max text-left text-sm">
-	                    <thead className={tableHeadClass}>
-	                      <tr>
-	                        <th className={`${stickyFirstHeadClass} whitespace-nowrap px-4 py-3`}>
-	                          S.No.
-	                        </th>
-	                        <th
-	                          className={`${stickySecondHeadClass} whitespace-nowrap px-4 py-3`}
-	                        >
-	                          Firm
-	                        </th>
-	                        <th className="px-4 py-3">Commercial Status</th>
-	                        <th className="px-4 py-3">Make / Model</th>
-	                        <th className="px-4 py-3">
-	                          {tenderItems.length > 1
-	                            ? "Item-wise Quoted Price Exclusive of GST"
-	                            : "Quoted Price Exclusive of GST"}
-	                        </th>
-	                        <th className="px-4 py-3">
-	                          Financial Evaluation Minutes
-	                        </th>
-                        <th className="px-4 py-3">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-		                      {technicalQualifiedVendors.map((vendor, index) => {
-		                        const form = commercialForms[vendor.id] || {};
-	                        return (
-	                          <tr key={vendor.id} className="bg-white align-top">
-                            <td className={`${stickyFirstCellClass} whitespace-nowrap px-4 py-3`}>
-                              {index + 1}
-                            </td>
-                            <td
-                              className={`${stickySecondCellClass} whitespace-nowrap px-4 py-3 font-medium`}
-                            >
-                              {vendor?.firm?.firm_name || "NA"}
-                            </td>
-                            <td className="px-4 py-3">
-                              <select
-                                className={compactSelectClass}
-                                value={form.commercial_status || "pending"}
-                                onChange={(event) =>
-                                  setCommercialField(
-                                    vendor.id,
-                                    "commercial_status",
-                                    event.target.value,
-                                  )
-                                }
-                                disabled={!canPerformOfficerTenderActions}
-                              >
-                                {commercialStatusOptions.map((option) => (
-                                  <option
-                                    key={option.value}
-                                    value={option.value}
-                                  >
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-		                            </td>
-		                            <td className="px-4 py-3">
-		                              {renderVendorItemEditor(
-		                                vendor,
-		                                "post_technical_make_model",
-		                                { readOnly: true },
-		                              )}
-		                            </td>
-		                            <td className="px-4 py-3">
-		                              {renderVendorItemQuoteEditor(vendor, {
-		                                stageKey: "post_technical_quote",
-		                              })}
-		                            </td>
-                            <td className="px-4 py-3">
-                              {financialEvaluationCommercialMeeting?.proceedings_document_path ? (
-                                <Button asChild variant="outline" size="sm">
-                                  <a
-                                    href={toProcurementFileViewUrl(
-                                      financialEvaluationCommercialMeeting.proceedings_document_path,
-                                    )}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                    View
-                                  </a>
-                                </Button>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  disabled
-                                >
-                                  Not Uploaded
-                                </Button>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              {canPerformOfficerTenderActions ? (
-                                <Button
-                                  className={primaryButtonClass}
-                                  disabled={
-                                    savingCommercialVendorId === vendor.id
-                                  }
-                                  onClick={() =>
-                                    saveCommercialReview(vendor.id)
-                                  }
-                                >
-                                  {savingCommercialVendorId === vendor.id
-                                    ? "Saving..."
-                                    : "Save"}
-                                </Button>
-                              ) : (
-                                <span className="text-xs text-slate-500">
-                                  Read only
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {!technicalQualifiedVendors.length ? (
-                        <tr>
-                          <td
-                            className="px-4 py-6 text-center text-slate-500"
-	                            colSpan={7}
-                          >
-                            No technically qualified vendor is available for
-                            commercial review.
-                          </td>
-                        </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
               </div>
             ) : null}
 
