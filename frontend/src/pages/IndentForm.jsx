@@ -67,6 +67,7 @@ const createBlankItem = () => ({
   specification: "",
   specific_make_required: "no",
   preferred_make: "",
+  administrative_approval_status: "not_required",
   remarks: "",
 });
 
@@ -117,10 +118,18 @@ const mapIndentToForm = (indent = {}) => ({
         specification: item.specification || "",
         specific_make_required: item.specific_make_required ? "yes" : "no",
         preferred_make: item.preferred_make || "",
+        administrative_approval_status:
+          item.administrative_approval_status ||
+          (item.administrative_approval_required ? "required" : "not_required"),
         remarks: item.remarks || "",
       }))
     : [createBlankItem()],
 });
+
+const requiresAdministrativeApproval = (item = {}) =>
+  ["required", "auto_required"].includes(
+    String(item.administrative_approval_status || "").toLowerCase(),
+  );
 
 function Field({ label: title, children, error }) {
   return (
@@ -502,7 +511,6 @@ export default function IndentForm() {
         }
         if (field === "specific_make_required" && value === "no") {
           nextItem.preferred_make = "";
-          nextItem.administrative_approval_document_path = "";
         }
         return nextItem;
       });
@@ -706,7 +714,7 @@ export default function IndentForm() {
     cfms_no: sourceForm.cfms_no || null,
     items: sourceForm.items.map((item) => ({
       ...item,
-      administrative_approval_required: item.specific_make_required === "yes",
+      administrative_approval_required: requiresAdministrativeApproval(item),
     })),
   });
 
@@ -1215,6 +1223,22 @@ export default function IndentForm() {
                             <option value="yes">Yes</option>
                           </select>
                         </Field>
+                        <Field label="Administrative Approval">
+                          <select
+                            value={item.administrative_approval_status || "not_required"}
+                            onChange={updateItem(index, "administrative_approval_status")}
+                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                            disabled={item.administrative_approval_status === "auto_required"}
+                          >
+                            <option value="not_required">Not required</option>
+                            <option value="required">Required</option>
+                            {item.administrative_approval_status === "auto_required" ? (
+                              <option value="auto_required">
+                                Auto required above Rs. 1 Cr
+                              </option>
+                            ) : null}
+                          </select>
+                        </Field>
                         <Field
                           label={
                             <span className="inline-flex items-center gap-2">
@@ -1369,7 +1393,7 @@ export default function IndentForm() {
                   })}
                 </div>
 
-                {form.items.some((item) => item.specific_make_required === "yes") ? (
+                {form.items.some((item) => requiresAdministrativeApproval(item)) ? (
                   <div className="md:max-w-3xl">
                     <FileAttachmentField
                       label="Administrative Approval Copy"

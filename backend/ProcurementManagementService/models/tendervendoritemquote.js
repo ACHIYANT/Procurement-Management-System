@@ -37,6 +37,14 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DECIMAL(15, 2),
         allowNull: true,
       },
+      pre_ra_amount: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+      },
+      post_ra_amount: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+      },
       loa_allocated_quantity: {
         type: DataTypes.DECIMAL(15, 2),
         allowNull: true,

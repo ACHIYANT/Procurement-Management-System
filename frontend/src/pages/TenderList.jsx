@@ -42,11 +42,13 @@ const chipClassMap = {
   gray: "bg-slate-200 text-slate-800 ring-1 ring-slate-300",
   green: "bg-emerald-200 text-emerald-950 ring-1 ring-emerald-300",
   red: "bg-rose-200 text-rose-950 ring-1 ring-rose-300",
+  yellow: "bg-amber-100 text-amber-900 ring-1 ring-amber-200",
+  cyan: "bg-cyan-100 text-cyan-900 ring-1 ring-cyan-200",
 };
 
 const summaryChip = (label, color) => (
   <span
-    className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
+    className={`tender-status-chip tender-status-chip-${color || "gray"} inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
       chipClassMap[color] || chipClassMap.gray
     }`}
   >
@@ -64,7 +66,9 @@ function LegendItem({ color = "gray", label }) {
   return (
     <div className="flex items-center gap-2 text-sm">
       <span className={`h-3.5 w-3.5 rounded-full ${colorMap[color] || colorMap.gray}`} />
-      <span className="text-xs font-medium text-slate-700">{label}</span>
+      <span className="tender-legend-label text-xs font-medium text-slate-700">
+        {label}
+      </span>
     </div>
   );
 }
@@ -85,14 +89,14 @@ const getTenderRowClassName = (row) => {
         Number(row?.pbg_summary?.short_po_count || 0) > 0));
 
   if (hasNoLinkedWork) {
-    return "bg-slate-100/85 border-l-[6px] border-slate-400";
+    return "tender-row-neutral bg-slate-100/85 border-l-[6px] border-slate-400";
   }
 
   if (hasIssue) {
-    return "bg-rose-100/90 border-l-[6px] border-rose-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]";
+    return "tender-row-issue bg-rose-100/90 border-l-[6px] border-rose-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]";
   }
 
-  return "bg-emerald-100/85 border-l-[6px] border-emerald-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]";
+  return "tender-row-ok bg-emerald-100/85 border-l-[6px] border-emerald-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]";
 };
 
 export default function TenderList() {
@@ -212,7 +216,7 @@ export default function TenderList() {
         updateTooltip="Select one tender to open details."
         searchPlaceholder="Search tender no., title, bid no..."
         aboveContent={
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-blue-50/70 px-4 py-3 shadow-sm">
+          <div className="tender-status-legend overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-blue-50/70 px-4 py-3 shadow-sm">
             <div className="mb-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Tender Status Legend

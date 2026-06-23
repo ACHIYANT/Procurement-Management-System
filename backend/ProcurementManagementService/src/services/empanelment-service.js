@@ -18,6 +18,19 @@ const EMPANELMENT_SORT_FIELDS = [
   "current_valid_upto",
 ];
 
+const getFinancialYearCode = (dateValue) => {
+  const date = new Date(`${dateValue}T00:00:00`);
+  const startYear = Number.isNaN(date.getTime())
+    ? new Date().getFullYear()
+    : date.getMonth() >= 3
+      ? date.getFullYear()
+      : date.getFullYear() - 1;
+  return `${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)}`;
+};
+
+const buildEmpanelmentNo = (id, validFrom) =>
+  `EMP/${getFinancialYearCode(validFrom)}/${String(id).padStart(6, "0")}`;
+
 class EmpanelmentService {
   constructor() {
     this.repository = new EmpanelmentRepository();
@@ -77,6 +90,32 @@ class EmpanelmentService {
           .filter((oem) => oem.oem_name),
       }))
       .filter((item) => item.category_name);
+  }
+
+  assertUniqueCategories(categories = []) {
+    const categoryKeys = new Set();
+    for (const category of categories) {
+      const categoryKey = String(category.category_name || "").toLowerCase();
+      if (categoryKeys.has(categoryKey)) {
+        const error = new Error(`Duplicate empanelment category "${category.category_name}".`);
+        error.statusCode = 400;
+        throw error;
+      }
+      categoryKeys.add(categoryKey);
+
+      const oemKeys = new Set();
+      for (const oem of category.oems || []) {
+        const oemKey = String(oem.oem_name || "").toLowerCase();
+        if (oemKeys.has(oemKey)) {
+          const error = new Error(
+            `Duplicate OEM "${oem.oem_name}" under ${category.category_name}.`,
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+        oemKeys.add(oemKey);
+      }
+    }
   }
 
   decorateEmpanelment(empanelment) {
@@ -192,17 +231,12 @@ class EmpanelmentService {
     const validUpto = this.normalizeDate(payload.valid_upto, "Valid upto");
     const categories = this.normalizeCategories(payload.item_categories);
 
-    if (!empanelmentNo) {
-      const error = new Error("Empanelment number is required.");
-      error.statusCode = 400;
-      throw error;
-    }
-
     if (!categories.length) {
       const error = new Error("At least one item category is required.");
       error.statusCode = 400;
       throw error;
     }
+    this.assertUniqueCategories(categories);
 
     if (validUpto < validFrom) {
       const error = new Error("Valid upto date must be on or after valid from date.");
@@ -216,12 +250,22 @@ class EmpanelmentService {
       error.statusCode = 404;
       throw error;
     }
+    if (empanelmentNo) {
+      const existingEmpanelment = await this.repository.findByEmpanelmentNo(
+        empanelmentNo,
+      );
+      if (existingEmpanelment) {
+        const error = new Error("This empanelment number already exists.");
+        error.statusCode = 409;
+        throw error;
+      }
+    }
 
     const empanelment = await this.repository.withTransaction(async (transaction) => {
       const createdEmpanelment = await this.repository.createEmpanelment(
         {
           firm_id: firmId,
-          empanelment_no: empanelmentNo,
+          empanelment_no: empanelmentNo || `PENDING-EMP-${Date.now()}`,
           valid_from: validFrom,
           valid_upto: validUpto,
           current_valid_upto: validUpto,
@@ -233,6 +277,14 @@ class EmpanelmentService {
         },
         { transaction },
       );
+
+      if (!empanelmentNo) {
+        await this.repository.updateEmpanelment(
+          createdEmpanelment,
+          { empanelment_no: buildEmpanelmentNo(createdEmpanelment.id, validFrom) },
+          { transaction },
+        );
+      }
 
       for (const category of categories) {
         const createdCategory = await this.repository.createItemCategory(

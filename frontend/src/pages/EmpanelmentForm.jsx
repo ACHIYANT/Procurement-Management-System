@@ -183,7 +183,6 @@ export default function EmpanelmentForm() {
     event.preventDefault();
     const fieldErrors = buildRequiredErrors(form, [
       { name: "firm_id", label: "Firm" },
-      { name: "empanelment_no", label: "Empanelment number" },
       { name: "valid_from", label: "Valid from" },
       { name: "valid_upto", label: "Valid upto" },
     ]);
@@ -306,8 +305,12 @@ export default function EmpanelmentForm() {
                       <input type="hidden" value={form.firm_id} readOnly />
                     </div>
                   </Field>
-                  <Field label="Empanelment No." error={errors.empanelment_no}>
-                    <Input value={form.empanelment_no} onChange={update("empanelment_no")} className={invalidControlClass(errors.empanelment_no)} />
+                  <Field label="Empanelment No.">
+                    <Input
+                      value={form.empanelment_no || "Auto generated on save"}
+                      readOnly
+                      className="cursor-not-allowed bg-[#f5f5f7] text-black/56"
+                    />
                   </Field>
                   <Field label="Valid From" error={errors.valid_from}>
                     <Input type="date" value={form.valid_from} onChange={update("valid_from")} className={invalidControlClass(errors.valid_from)} />

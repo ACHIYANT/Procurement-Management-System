@@ -1,5 +1,6 @@
 "use strict";
 
+const { Op } = require("sequelize");
 const { ItemCategory, ItemSubcategory, sequelize } = require("../../models");
 
 const categoryInclude = [
@@ -25,9 +26,26 @@ class ItemCategoryRepository {
   }
 
   async findCategoryByName(categoryName) {
+    const normalizedName = String(categoryName || "").trim().replace(/\s+/g, " ").toLowerCase();
     return ItemCategory.findOne({
-      where: { category_name: categoryName },
+      where: sequelize.where(
+        sequelize.fn("LOWER", sequelize.fn("TRIM", sequelize.col("category_name"))),
+        normalizedName,
+      ),
       include: categoryInclude,
+    });
+  }
+
+  async findSubcategoryByCategoryAndName(categoryId, subcategoryName) {
+    const normalizedName = String(subcategoryName || "").trim().replace(/\s+/g, " ").toLowerCase();
+    return ItemSubcategory.findOne({
+      where: {
+        category_id: categoryId,
+        [Op.and]: sequelize.where(
+          sequelize.fn("LOWER", sequelize.fn("TRIM", sequelize.col("subcategory_name"))),
+          normalizedName,
+        ),
+      },
     });
   }
 

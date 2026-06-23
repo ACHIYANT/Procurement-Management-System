@@ -83,6 +83,19 @@ const buildPayload = (form, roles) => ({
   actor_roles: roles,
 });
 
+const primaryButtonClass =
+  "rounded-full bg-[#0071e3] text-white shadow-[0_16px_34px_-24px_rgba(0,113,227,0.9)] hover:bg-[#0066cc]";
+const lightButtonClass =
+  "rounded-full border-black/10 bg-white text-[#1d1d1f] shadow-sm hover:bg-[#f5f5f7]";
+const fieldLabelClass =
+  "text-[11px] font-semibold uppercase tracking-[0.2em] text-black/42";
+const inputClass =
+  "h-11 rounded-2xl border-slate-200 bg-white shadow-[0_12px_28px_-24px_rgba(15,23,42,0.55)]";
+const textareaClass =
+  "w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm leading-6 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.55)] outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+const formSectionClass =
+  "rounded-[28px] border border-black/8 bg-white/78 p-4 shadow-[0_18px_55px_-48px_rgba(15,23,42,0.8)]";
+
 export default function ItemSpecificationTemplateMaster() {
   const [roles] = useState(() => getCurrentUserRoles());
   const [templates, setTemplates] = useState([]);
@@ -209,6 +222,23 @@ export default function ItemSpecificationTemplateMaster() {
     }
   };
 
+  const activeTemplateCount = templates.filter(
+    (template) => template.is_active !== false,
+  ).length;
+  const totalGroupCount = templates.reduce(
+    (sum, template) =>
+      sum +
+      ((template.groups_json || template.groups || []).length || 0),
+    0,
+  );
+  const totalCheckCount = templates.reduce(
+    (sum, template) =>
+      sum +
+      ((template.required_details_json || template.required_details || [])
+        .length || 0),
+    0,
+  );
+
   return (
     <>
       <div className="min-h-full bg-[#f5f5f7] px-4 py-7 text-[#1d1d1f]">
@@ -237,94 +267,167 @@ export default function ItemSpecificationTemplateMaster() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
-            <Card className="border-0 bg-white shadow-[0_20px_50px_-40px_rgba(0,0,0,0.45)] ring-1 ring-black/8">
-              <CardContent className="space-y-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-[1.35rem] font-semibold tracking-[-0.03em]">
-                      {form.id ? "Edit Template" : "Add Template"}
-                    </h2>
-                    <p className="mt-1 text-sm text-black/56">
-                      Use comma or new line separated values for keywords, hints, suggestions, and required-detail patterns.
-                    </p>
+            <Card className="overflow-hidden rounded-[34px] border-0 bg-white py-0 shadow-[0_26px_80px_-56px_rgba(15,23,42,0.65)] ring-1 ring-black/8">
+              <CardContent className="p-0">
+                <div className="relative overflow-hidden border-b border-black/6 bg-[radial-gradient(circle_at_top_left,#dff3ff,transparent_36%),linear-gradient(135deg,#fbfdff,#ffffff_48%,#f5f8ff)] px-5 py-5 md:px-6">
+                  <div className="absolute right-[-5rem] top-[-7rem] h-56 w-56 rounded-full bg-[#0071e3]/10 blur-3xl" />
+                  <div className="relative flex flex-wrap items-start justify-between gap-4">
+                    <div className="max-w-2xl">
+                      <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-blue-700 ring-1 ring-blue-100">
+                        Template Designer
+                      </span>
+                      <h2 className="mt-3 text-[1.55rem] font-semibold tracking-[-0.045em] text-[#1d1d1f]">
+                        {form.id ? "Edit Smart Template" : "Create Smart Template"}
+                      </h2>
+                      <p className="mt-1.5 text-sm leading-6 text-slate-600">
+                        Build the hints Smart Fill uses to detect item type,
+                        suggest specification blocks, and warn for missing
+                        details.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                          form.is_active
+                            ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+                            : "bg-slate-100 text-slate-600 ring-slate-200"
+                        }`}
+                      >
+                        {form.is_active ? "Active" : "Inactive"}
+                      </span>
+                      {form.id ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={lightButtonClass}
+                          onClick={resetForm}
+                        >
+                          <Plus className="h-4 w-4" />
+                          New
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
-                  {form.id ? (
-                    <Button type="button" variant="outline" onClick={resetForm}>
-                      <Plus className="h-4 w-4" />
-                      New
-                    </Button>
-                  ) : null}
                 </div>
 
-                <form className="space-y-5" onSubmit={submit}>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="space-y-1">
-                      <span className="text-sm font-medium text-black/70">Template Name</span>
-                      <Input value={form.template_name} onChange={updateField("template_name")} placeholder="Windows All-in-One Desktop" />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-sm font-medium text-black/70">Default Item Name</span>
-                      <Input value={form.item_name} onChange={updateField("item_name")} placeholder="Windows All-in-One Desktop" />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-sm font-medium text-black/70">Sort Order</span>
-                      <Input type="number" min="0" value={form.sort_order} onChange={updateField("sort_order")} />
-                    </label>
-                    <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={form.is_active}
-                        onChange={updateField("is_active")}
-                        className="h-4 w-4 rounded border-slate-300"
-                      />
-                      <span className="text-sm font-medium text-black/70">Active in indent Smart Fill</span>
-                    </label>
-                  </div>
+                <form className="space-y-5 p-5 md:p-6" onSubmit={submit}>
+                  <section className={formSectionClass}>
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className={fieldLabelClass}>Identity</p>
+                        <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em]">
+                          Name and availability
+                        </h3>
+                      </div>
+                      <label className="inline-flex items-center gap-3 rounded-full border border-slate-200 bg-[#f5f5f7] px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={form.is_active}
+                          onChange={updateField("is_active")}
+                          className="h-4 w-4 rounded border-slate-300 accent-[#0071e3]"
+                        />
+                        <span className="text-sm font-semibold text-slate-700">
+                          Active in Smart Fill
+                        </span>
+                      </label>
+                    </div>
 
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <label className="space-y-1">
-                      <span className="text-sm font-medium text-black/70">Keywords</span>
-                      <textarea
-                        rows={5}
-                        value={form.keywords_text}
-                        onChange={updateField("keywords_text")}
-                        placeholder="computer&#10;desktop&#10;aio"
-                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-sm font-medium text-black/70">Category Hints</span>
-                      <textarea
-                        rows={5}
-                        value={form.category_hints_text}
-                        onChange={updateField("category_hints_text")}
-                        placeholder="computer&#10;it hardware"
-                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-sm font-medium text-black/70">Subcategory Hints</span>
-                      <textarea
-                        rows={5}
-                        value={form.subcategory_hints_text}
-                        onChange={updateField("subcategory_hints_text")}
-                        placeholder="all-in-one&#10;desktop"
-                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                      />
-                    </label>
-                  </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="space-y-1.5">
+                        <span className={fieldLabelClass}>Template Name</span>
+                        <Input
+                          value={form.template_name}
+                          onChange={updateField("template_name")}
+                          placeholder="Windows All-in-One Desktop"
+                          className={inputClass}
+                        />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className={fieldLabelClass}>Default Item Name</span>
+                        <Input
+                          value={form.item_name}
+                          onChange={updateField("item_name")}
+                          placeholder="Windows All-in-One Desktop"
+                          className={inputClass}
+                        />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className={fieldLabelClass}>Sort Order</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={form.sort_order}
+                          onChange={updateField("sort_order")}
+                          className={inputClass}
+                        />
+                      </label>
+                    </div>
+                  </section>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <section className={formSectionClass}>
+                    <div className="mb-4">
+                      <p className={fieldLabelClass}>Matching Signals</p>
+                      <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em]">
+                        Help PMS recognize the item
+                      </h3>
+                      <p className="mt-1 text-sm text-black/52">
+                        Keep each value on a new line for cleaner matching.
+                      </p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <label className="space-y-1.5">
+                        <span className={fieldLabelClass}>Keywords</span>
+                        <textarea
+                          rows={5}
+                          value={form.keywords_text}
+                          onChange={updateField("keywords_text")}
+                          placeholder="computer&#10;desktop&#10;aio"
+                          className={textareaClass}
+                        />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className={fieldLabelClass}>Category Hints</span>
+                        <textarea
+                          rows={5}
+                          value={form.category_hints_text}
+                          onChange={updateField("category_hints_text")}
+                          placeholder="computer&#10;it hardware"
+                          className={textareaClass}
+                        />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className={fieldLabelClass}>Subcategory Hints</span>
+                        <textarea
+                          rows={5}
+                          value={form.subcategory_hints_text}
+                          onChange={updateField("subcategory_hints_text")}
+                          placeholder="all-in-one&#10;desktop"
+                          className={textareaClass}
+                        />
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="rounded-[28px] border border-blue-100 bg-[linear-gradient(135deg,#f7fbff,#ffffff)] p-4 shadow-[0_18px_55px_-48px_rgba(0,113,227,0.9)]">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">
                           Suggestion Groups
+                        </p>
+                        <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em]">
+                          Specification building blocks
                         </h3>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Example groups: Processor, Memory, Storage, OS, Display.
+                        <p className="mt-1 text-sm text-slate-600">
+                          Example groups: Processor, Memory, Storage, OS,
+                          Display.
                         </p>
                       </div>
-                      <Button type="button" variant="outline" size="sm" onClick={addGroup}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={lightButtonClass}
+                        onClick={addGroup}
+                      >
                         <Plus className="h-4 w-4" />
                         Add Group
                       </Button>
@@ -332,24 +435,37 @@ export default function ItemSpecificationTemplateMaster() {
 
                     <div className="mt-4 space-y-3">
                       {form.groups.map((group, index) => (
-                        <div key={index} className="rounded-2xl bg-white p-3 ring-1 ring-black/6">
-                          <div className="grid gap-3 md:grid-cols-[0.4fr_1fr_auto]">
+                        <div
+                          key={index}
+                          className="rounded-[24px] border border-black/6 bg-white/88 p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.7)]"
+                        >
+                          <div className="grid gap-3 md:grid-cols-[0.42fr_1fr_auto]">
                             <Input
                               value={group.label}
-                              onChange={(event) => updateGroup(index, "label", event.target.value)}
+                              onChange={(event) =>
+                                updateGroup(index, "label", event.target.value)
+                              }
                               placeholder="Memory"
+                              className={inputClass}
                             />
                             <textarea
                               rows={3}
                               value={group.suggestions_text}
-                              onChange={(event) => updateGroup(index, "suggestions_text", event.target.value)}
+                              onChange={(event) =>
+                                updateGroup(
+                                  index,
+                                  "suggestions_text",
+                                  event.target.value,
+                                )
+                              }
                               placeholder="8GB RAM&#10;16GB RAM&#10;32GB RAM"
-                              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                              className={textareaClass}
                             />
                             <Button
                               type="button"
                               variant="outline"
                               size="icon"
+                              className="rounded-full"
                               onClick={() => removeGroup(index)}
                               aria-label="Remove group"
                             >
@@ -359,19 +475,28 @@ export default function ItemSpecificationTemplateMaster() {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </section>
 
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <section className="rounded-[28px] border border-amber-200 bg-[linear-gradient(135deg,#fff8e8,#ffffff)] p-4 shadow-[0_18px_55px_-48px_rgba(245,158,11,0.9)]">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-800">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-800">
                           Missing Detail Checks
+                        </p>
+                        <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em]">
+                          Quality guardrails
                         </h3>
-                        <p className="mt-1 text-xs text-amber-800/70">
-                          These show helpful hints if the user has not entered key specification parts.
+                        <p className="mt-1 text-sm text-amber-900/70">
+                          Show helpful hints when key specification parts are
+                          missing.
                         </p>
                       </div>
-                      <Button type="button" variant="outline" size="sm" onClick={addRequiredDetail}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={lightButtonClass}
+                        onClick={addRequiredDetail}
+                      >
                         <Plus className="h-4 w-4" />
                         Add Check
                       </Button>
@@ -379,24 +504,41 @@ export default function ItemSpecificationTemplateMaster() {
 
                     <div className="mt-4 space-y-3">
                       {form.required_details.map((detail, index) => (
-                        <div key={index} className="rounded-2xl bg-white p-3 ring-1 ring-amber-200">
-                          <div className="grid gap-3 md:grid-cols-[0.4fr_1fr_auto]">
+                        <div
+                          key={index}
+                          className="rounded-[24px] border border-amber-100 bg-white/88 p-3 shadow-[0_18px_40px_-34px_rgba(245,158,11,0.6)]"
+                        >
+                          <div className="grid gap-3 md:grid-cols-[0.42fr_1fr_auto]">
                             <Input
                               value={detail.label}
-                              onChange={(event) => updateRequiredDetail(index, "label", event.target.value)}
+                              onChange={(event) =>
+                                updateRequiredDetail(
+                                  index,
+                                  "label",
+                                  event.target.value,
+                                )
+                              }
                               placeholder="RAM"
+                              className={inputClass}
                             />
                             <textarea
                               rows={3}
                               value={detail.patterns_text}
-                              onChange={(event) => updateRequiredDetail(index, "patterns_text", event.target.value)}
+                              onChange={(event) =>
+                                updateRequiredDetail(
+                                  index,
+                                  "patterns_text",
+                                  event.target.value,
+                                )
+                              }
                               placeholder="ram&#10;memory&#10;gb"
-                              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                              className={textareaClass}
                             />
                             <Button
                               type="button"
                               variant="outline"
                               size="icon"
+                              className="rounded-full"
                               onClick={() => removeRequiredDetail(index)}
                               aria-label="Remove check"
                             >
@@ -406,65 +548,121 @@ export default function ItemSpecificationTemplateMaster() {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </section>
 
-                  <Button className="w-full rounded-full bg-[#0071e3] text-white hover:bg-[#0066cc]" disabled={saving}>
+                  <Button className={`${primaryButtonClass} h-11 w-full`} disabled={saving}>
                     <Save className="h-4 w-4" />
-                    {saving ? "Saving..." : form.id ? "Update Template" : "Save Template"}
+                    {saving
+                      ? "Saving..."
+                      : form.id
+                        ? "Update Template"
+                        : "Save Template"}
                   </Button>
                 </form>
               </CardContent>
             </Card>
 
-            <Card className="border-0 bg-white shadow-[0_20px_50px_-40px_rgba(0,0,0,0.45)] ring-1 ring-black/8">
-              <CardContent className="space-y-4">
-                <div>
-                  <h2 className="text-[1.35rem] font-semibold tracking-[-0.03em]">
-                    Active Smart Templates
-                  </h2>
-                  <p className="mt-1 text-sm text-black/56">
-                    Templates are used by Smart Fill in the indent item form.
-                  </p>
+            <Card className="overflow-hidden rounded-[34px] border-0 bg-white py-0 shadow-[0_26px_80px_-56px_rgba(15,23,42,0.65)] ring-1 ring-black/8">
+              <CardContent className="p-0">
+                <div className="relative overflow-hidden border-b border-black/6 bg-[radial-gradient(circle_at_top_right,#e8fff5,transparent_34%),linear-gradient(135deg,#ffffff,#f8fbff)] px-5 py-5 md:px-6">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="max-w-2xl">
+                      <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-700 ring-1 ring-emerald-100">
+                        Template Library
+                      </span>
+                      <h2 className="mt-3 text-[1.55rem] font-semibold tracking-[-0.045em]">
+                        Active Smart Templates
+                      </h2>
+                      <p className="mt-1.5 text-sm leading-6 text-slate-600">
+                        Templates used by Smart Fill in the indent item form.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        ["Active", activeTemplateCount],
+                        ["Groups", totalGroupCount],
+                        ["Checks", totalCheckCount],
+                      ].map(([labelText, value]) => (
+                        <div
+                          key={labelText}
+                          className="rounded-[18px] bg-white px-3 py-2 text-center shadow-sm ring-1 ring-black/6"
+                        >
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/38">
+                            {labelText}
+                          </p>
+                          <p className="mt-1 text-lg font-semibold tracking-[-0.04em]">
+                            {value}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4 bg-[#fbfcff] p-5 md:p-6">
                   {loading ? (
-                    <div className="rounded-2xl border border-dashed border-black/12 bg-[#f5f5f7] px-4 py-8 text-sm text-black/56">
+                    <div className="rounded-[28px] border border-dashed border-black/12 bg-white px-5 py-10 text-center text-sm text-black/56">
                       Loading specification templates...
                     </div>
                   ) : templates.length ? (
                     templates.map((template) => {
                       const groups = template.groups_json || template.groups || [];
-                      const requiredDetails = template.required_details_json || template.required_details || [];
+                      const requiredDetails =
+                        template.required_details_json ||
+                        template.required_details ||
+                        [];
+                      const keywordCount = (template.keywords_json || [])
+                        .length;
+
                       return (
-                        <div key={template.id} className="rounded-2xl bg-[#f5f5f7] p-4 ring-1 ring-black/6">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div
+                          key={template.id}
+                          className="group overflow-hidden rounded-[30px] border border-black/8 bg-white shadow-[0_22px_62px_-52px_rgba(15,23,42,0.8)] transition hover:-translate-y-0.5 hover:shadow-[0_32px_80px_-56px_rgba(0,113,227,0.45)]"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/6 bg-[linear-gradient(135deg,#ffffff,#f6f9ff)] px-4 py-4">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
-                                <Sparkles className="h-4 w-4 text-[#0071e3]" />
-                                <p className="text-base font-semibold text-[#1d1d1f]">
-                                  {template.template_name}
-                                </p>
-                                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                                  template.is_active
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-slate-200 text-slate-600"
-                                }`}
+                                <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-50 text-[#0071e3] ring-1 ring-blue-100">
+                                  <Sparkles className="h-4 w-4" />
+                                </span>
+                                <div>
+                                  <p className="text-lg font-semibold tracking-[-0.03em] text-[#1d1d1f]">
+                                    {template.template_name}
+                                  </p>
+                                  <p className="text-sm text-black/52">
+                                    Default item: {template.item_name || "Not set"}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                    template.is_active
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : "bg-slate-200 text-slate-600"
+                                  }`}
                                 >
                                   {template.is_active ? "Active" : "Inactive"}
                                 </span>
                               </div>
-                              <p className="mt-1 text-sm text-black/56">
-                                Default item: {template.item_name || "Not set"}
-                              </p>
-                              <p className="mt-1 text-xs uppercase tracking-[0.18em] text-black/40">
-                                Sort {template.sort_order ?? 100} · {(template.keywords_json || []).length} keywords · {groups.length} groups · {requiredDetails.length} checks
-                              </p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {[
+                                  `Sort ${template.sort_order ?? 100}`,
+                                  `${keywordCount} keyword${keywordCount === 1 ? "" : "s"}`,
+                                  `${groups.length} group${groups.length === 1 ? "" : "s"}`,
+                                  `${requiredDetails.length} check${requiredDetails.length === 1 ? "" : "s"}`,
+                                ].map((item) => (
+                                  <span
+                                    key={item}
+                                    className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-black/8"
+                                  >
+                                    {item}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                             <Button
                               type="button"
                               variant="outline"
-                              size="sm"
+                              className={lightButtonClass}
                               onClick={() => setForm(mapTemplateToForm(template))}
                             >
                               <Pencil className="h-4 w-4" />
@@ -473,24 +671,35 @@ export default function ItemSpecificationTemplateMaster() {
                           </div>
 
                           {groups.length ? (
-                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                              {groups.map((group) => (
-                                <div key={group.label} className="rounded-xl bg-white px-3 py-2 ring-1 ring-black/6">
-                                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-black/42">
-                                    {group.label}
-                                  </p>
-                                  <p className="mt-1 text-sm text-black/64">
-                                    {(group.suggestions || []).slice(0, 4).join(", ")}
-                                  </p>
-                                </div>
-                              ))}
+                            <div className="grid gap-2 bg-[#f5f5f7] p-4 sm:grid-cols-2">
+                              {groups.map((group) => {
+                                const suggestions = group.suggestions || [];
+                                return (
+                                  <div
+                                    key={group.label}
+                                    className="rounded-[20px] bg-white px-3.5 py-3 ring-1 ring-black/6"
+                                  >
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-black/42">
+                                      {group.label}
+                                    </p>
+                                    <p className="mt-1.5 text-sm leading-6 text-black/64">
+                                      {suggestions.slice(0, 4).join(", ")}
+                                      {suggestions.length > 4 ? "..." : ""}
+                                    </p>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ) : null}
+                          ) : (
+                            <div className="bg-[#f5f5f7] p-4 text-sm text-black/52">
+                              No suggestion groups configured.
+                            </div>
+                          )}
                         </div>
                       );
                     })
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-black/12 bg-[#f5f5f7] px-4 py-8 text-sm text-black/56">
+                    <div className="rounded-[28px] border border-dashed border-black/12 bg-white px-5 py-10 text-center text-sm text-black/56">
                       No specification templates created yet.
                     </div>
                   )}

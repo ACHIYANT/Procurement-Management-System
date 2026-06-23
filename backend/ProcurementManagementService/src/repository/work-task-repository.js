@@ -118,6 +118,20 @@ class WorkTaskRepository {
     });
   }
 
+  findReminderOccurrenceTasks(sourceTaskId, transaction) {
+    return WorkTask.findAll({
+      where: {
+        origin_type: "system",
+        system_rule_code: "task_reminder_occurrence",
+        entity_type: "work_task_reminder",
+        entity_id: { [Op.like]: `${sourceTaskId}:%` },
+        status: { [Op.in]: ["open", "in_progress", "returned", "reassigned"] },
+      },
+      include: taskIncludes,
+      transaction,
+    });
+  }
+
   createTask(payload, transaction) {
     return WorkTask.create(payload, { transaction });
   }
@@ -136,6 +150,17 @@ class WorkTaskRepository {
       where: { work_task_id: taskId },
       transaction,
     });
+  }
+
+  async replaceAssignees(taskId, assignees, transaction) {
+    await WorkTaskAssignee.destroy({
+      where: { work_task_id: taskId },
+      transaction,
+    });
+    return this.createAssignees(
+      assignees.map((assignee) => ({ ...assignee, work_task_id: taskId })),
+      transaction,
+    );
   }
 
   createComment(payload, transaction) {

@@ -99,6 +99,17 @@ class ItemCategoryService {
     const update = {};
     if ("category_name" in payload) {
       update.category_name = requireValue(payload, "category_name", "Category name");
+      const existingCategory = await this.repository.findCategoryByName(
+        update.category_name,
+      );
+      if (
+        existingCategory &&
+        Number(existingCategory.id) !== Number(category.id)
+      ) {
+        const error = new Error("Another category with this name already exists.");
+        error.statusCode = 409;
+        throw error;
+      }
     }
     if ("is_active" in payload) {
       update.is_active = normalizeBoolean(payload.is_active, true);
@@ -156,6 +167,21 @@ class ItemCategoryService {
       update.subcategory_name =
         normalizeNullableText(payload.subcategory_name) ||
         subcategory.subcategory_name;
+      const existingSubcategory =
+        await this.repository.findSubcategoryByCategoryAndName(
+          subcategory.category_id,
+          update.subcategory_name,
+        );
+      if (
+        existingSubcategory &&
+        Number(existingSubcategory.id) !== Number(subcategory.id)
+      ) {
+        const error = new Error(
+          "Another subcategory with this name already exists under this category.",
+        );
+        error.statusCode = 409;
+        throw error;
+      }
     }
     if ("is_active" in payload) {
       update.is_active = normalizeBoolean(payload.is_active, true);
