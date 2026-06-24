@@ -328,8 +328,25 @@ export default function IndentForm() {
     type: "info",
     message: "",
   });
-  const departmentOptions = useMemo(() => getHaryanaGovernmentMasterTree(), []);
+  const [departmentOptions, setDepartmentOptions] = useState(() =>
+    getHaryanaGovernmentMasterTree(),
+  );
   const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const data = await procurementRequest("/government-organizations?activeOnly=true");
+        if (Array.isArray(data?.tree) && data.tree.length) {
+          setDepartmentOptions(data.tree);
+        }
+      } catch {
+        // Keep the bundled Haryana master as a safe fallback if the API is unavailable.
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(async () => {

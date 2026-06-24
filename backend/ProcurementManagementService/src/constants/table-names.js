@@ -6,6 +6,7 @@ const INDENT_ITEM_EVENT_TABLE = "indent_item_events";
 const ITEM_CATEGORY_TABLE = "item_categories";
 const ITEM_SUBCATEGORY_TABLE = "item_subcategories";
 const ITEM_SPECIFICATION_TEMPLATE_TABLE = "item_specification_templates";
+const GOVERNMENT_ORGANIZATION_TABLE = "government_organizations";
 const PROCUREMENT_CASE_TABLE = "procurement_cases";
 const PROCUREMENT_CASE_ITEM_TABLE = "procurement_case_items";
 const FIRM_TABLE = "firms";
@@ -68,6 +69,7 @@ module.exports = {
   ITEM_CATEGORY_TABLE,
   ITEM_SUBCATEGORY_TABLE,
   ITEM_SPECIFICATION_TEMPLATE_TABLE,
+  GOVERNMENT_ORGANIZATION_TABLE,
   PROCUREMENT_CASE_TABLE,
   PROCUREMENT_CASE_ITEM_TABLE,
   FIRM_TABLE,
