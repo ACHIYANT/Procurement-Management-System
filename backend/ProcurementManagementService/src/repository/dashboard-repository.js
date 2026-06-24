@@ -5,10 +5,12 @@ const {
   Indent,
   IndentItem,
   ProcurementCase,
+  ProcurementCaseItem,
   Tender,
   TenderVendor,
   TenderEmdEntry,
   PurchaseOrder,
+  PurchaseOrderPayment,
   PbgEntry,
   Empanelment,
   EmpanelmentItemCategory,
@@ -16,7 +18,231 @@ const {
 } = require("../../models");
 
 class DashboardRepository {
-  async getValueMetrics() {
+  parseRoles(roles) {
+    if (Array.isArray(roles)) return roles;
+    return String(roles || "")
+      .split(",")
+      .map((role) => role.trim())
+      .filter(Boolean);
+  }
+
+  normalizeRole(role) {
+    return String(role || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]+/g, "_")
+      .replace(/_+/g, "_");
+  }
+
+  isAdminRole(roles = []) {
+    const roleSet = new Set(this.parseRoles(roles).map((role) => this.normalizeRole(role)));
+    return roleSet.has("ADMIN") || roleSet.has("SUPER_ADMIN");
+  }
+
+  falseWhere() {
+    return { id: { [Op.in]: [-1] } };
+  }
+
+  idWhere(ids = []) {
+    return { id: { [Op.in]: Array.isArray(ids) && ids.length ? ids : [-1] } };
+  }
+
+  inWhere(field, ids = []) {
+    return Array.isArray(ids) && ids.length ? { [field]: { [Op.in]: ids } } : null;
+  }
+
+  andWhere(...parts) {
+    const filtered = parts.filter(Boolean);
+    if (!filtered.length) return undefined;
+    if (filtered.length === 1) return filtered[0];
+    return { [Op.and]: filtered };
+  }
+
+  orWhere(parts = []) {
+    const filtered = parts.filter(Boolean);
+    if (!filtered.length) return this.falseWhere();
+    if (filtered.length === 1) return filtered[0];
+    return { [Op.or]: filtered };
+  }
+
+  scopeWhere(scopeIds, key) {
+    if (!scopeIds) return undefined;
+    return this.idWhere(scopeIds[key] || []);
+  }
+
+  emdScopeWhere(scopeIds) {
+    if (!scopeIds) return undefined;
+    return this.orWhere([
+      this.inWhere("tender_id", scopeIds.tenderIds),
+      this.inWhere("created_by", scopeIds.employeeIds),
+      this.inWhere("updated_by", scopeIds.employeeIds),
+    ]);
+  }
+
+  pbgScopeWhere(scopeIds) {
+    if (!scopeIds) return undefined;
+    return this.orWhere([
+      this.inWhere("tender_id", scopeIds.tenderIds),
+      this.inWhere("po_id", scopeIds.poIds),
+      this.inWhere("created_by", scopeIds.employeeIds),
+      this.inWhere("updated_by", scopeIds.employeeIds),
+    ]);
+  }
+
+  async resolveDashboardScope(query = {}) {
+    const roles = this.parseRoles(query.roles || query.actor_roles);
+    if (!roles.length && !query.empcode && !query.employee_id) return null;
+    if (this.isAdminRole(roles)) return null;
+
+    const employeeId = Number(query.employee_id || 0);
+    const empcode = String(query.empcode || "").trim();
+    const employee = employeeId
+      ? await ProcurementEmployee.findByPk(employeeId, { attributes: ["id"] })
+      : empcode
+        ? await ProcurementEmployee.findOne({
+            where: { empcode },
+            attributes: ["id"],
+          })
+        : null;
+
+    if (!employee) {
+      return {
+        employeeIds: [],
+        indentIds: [],
+        indentItemIds: [],
+        caseIds: [],
+        tenderIds: [],
+        poIds: [],
+      };
+    }
+
+    return this.buildScopedEntityIds(Number(employee.id));
+  }
+
+  async buildScopedEntityIds(employeeId) {
+    const employeeIds = [employeeId];
+    const indentIds = new Set();
+    const indentItemIds = new Set();
+    const caseIds = new Set();
+    const tenderIds = new Set();
+    const poIds = new Set();
+
+    const [ownedIndents, ownedItems, createdCaseItems, paymentRows] = await Promise.all([
+      Indent.findAll({
+        where: this.orWhere([
+          { created_by: employeeId },
+          { updated_by: employeeId },
+        ]),
+        attributes: ["id"],
+      }),
+      IndentItem.findAll({
+        where: this.orWhere([
+          { created_by: employeeId },
+          { updated_by: employeeId },
+          { assigned_procurement_officer_id: employeeId },
+          { estimated_by_procurement_officer_id: employeeId },
+        ]),
+        attributes: ["id", "indent_id"],
+      }),
+      ProcurementCaseItem.findAll({
+        where: this.orWhere([
+          { created_by: employeeId },
+          { updated_by: employeeId },
+        ]),
+        attributes: ["procurement_case_id", "indent_item_id"],
+      }),
+      PurchaseOrderPayment.findAll({
+        where: this.orWhere([
+          { created_by: employeeId },
+          { updated_by: employeeId },
+        ]),
+        attributes: ["po_id"],
+      }),
+    ]);
+
+    ownedIndents.forEach((row) => indentIds.add(Number(row.id)));
+    ownedItems.forEach((row) => {
+      indentItemIds.add(Number(row.id));
+      if (row.indent_id) indentIds.add(Number(row.indent_id));
+    });
+    createdCaseItems.forEach((row) => {
+      if (row.procurement_case_id) caseIds.add(Number(row.procurement_case_id));
+      if (row.indent_item_id) indentItemIds.add(Number(row.indent_item_id));
+    });
+    paymentRows.forEach((row) => {
+      if (row.po_id) poIds.add(Number(row.po_id));
+    });
+
+    const indentLinkedItems = await IndentItem.findAll({
+      where: this.inWhere("indent_id", Array.from(indentIds)) || this.falseWhere(),
+      attributes: ["id", "indent_id"],
+    });
+    indentLinkedItems.forEach((row) => {
+      indentItemIds.add(Number(row.id));
+      if (row.indent_id) indentIds.add(Number(row.indent_id));
+    });
+
+    const linkedCaseItems = await ProcurementCaseItem.findAll({
+      where: this.inWhere("indent_item_id", Array.from(indentItemIds)) || this.falseWhere(),
+      attributes: ["procurement_case_id"],
+    });
+    linkedCaseItems.forEach((row) => {
+      if (row.procurement_case_id) caseIds.add(Number(row.procurement_case_id));
+    });
+
+    const cases = await ProcurementCase.findAll({
+      where: this.orWhere([
+        { created_by: employeeId },
+        { updated_by: employeeId },
+        { procurement_officer_id: employeeId },
+        this.inWhere("indent_id", Array.from(indentIds)),
+        this.inWhere("id", Array.from(caseIds)),
+      ]),
+      attributes: ["id", "indent_id"],
+    });
+    cases.forEach((row) => {
+      caseIds.add(Number(row.id));
+      if (row.indent_id) indentIds.add(Number(row.indent_id));
+    });
+
+    const tenders = await Tender.findAll({
+      where: this.orWhere([
+        { created_by: employeeId },
+        { updated_by: employeeId },
+        this.inWhere("procurement_case_id", Array.from(caseIds)),
+      ]),
+      attributes: ["id", "procurement_case_id"],
+    });
+    tenders.forEach((row) => {
+      tenderIds.add(Number(row.id));
+      if (row.procurement_case_id) caseIds.add(Number(row.procurement_case_id));
+    });
+
+    const purchaseOrders = await PurchaseOrder.findAll({
+      where: this.orWhere([
+        { created_by: employeeId },
+        { updated_by: employeeId },
+        this.inWhere("tender_id", Array.from(tenderIds)),
+        this.inWhere("id", Array.from(poIds)),
+      ]),
+      attributes: ["id", "tender_id"],
+    });
+    purchaseOrders.forEach((row) => {
+      poIds.add(Number(row.id));
+      if (row.tender_id) tenderIds.add(Number(row.tender_id));
+    });
+
+    return {
+      employeeIds,
+      indentIds: Array.from(indentIds),
+      indentItemIds: Array.from(indentItemIds),
+      caseIds: Array.from(caseIds),
+      tenderIds: Array.from(tenderIds),
+      poIds: Array.from(poIds),
+    };
+  }
+
+  async getValueMetrics(scopeIds = null) {
     const [
       indentItems,
       procurementCases,
@@ -25,12 +251,30 @@ class DashboardRepository {
       emdEntries,
       pbgEntries,
     ] = await Promise.all([
-      IndentItem.findAll({ attributes: ["estimated_amount"] }),
-      ProcurementCase.findAll({ attributes: ["estimated_value"] }),
-      Tender.findAll({ attributes: ["tender_value", "emd_amount", "tender_fee_amount"] }),
-      PurchaseOrder.findAll({ attributes: ["po_value", "required_pbg_amount"] }),
-      TenderEmdEntry.findAll({ attributes: ["emd_amount", "tender_fee_amount"] }),
-      PbgEntry.findAll({ attributes: ["pbg_amount"] }),
+      IndentItem.findAll({
+        where: this.scopeWhere(scopeIds, "indentItemIds"),
+        attributes: ["estimated_amount"],
+      }),
+      ProcurementCase.findAll({
+        where: this.scopeWhere(scopeIds, "caseIds"),
+        attributes: ["estimated_value"],
+      }),
+      Tender.findAll({
+        where: this.scopeWhere(scopeIds, "tenderIds"),
+        attributes: ["tender_value", "emd_amount", "tender_fee_amount"],
+      }),
+      PurchaseOrder.findAll({
+        where: this.scopeWhere(scopeIds, "poIds"),
+        attributes: ["po_value", "required_pbg_amount"],
+      }),
+      TenderEmdEntry.findAll({
+        where: this.emdScopeWhere(scopeIds),
+        attributes: ["emd_amount", "tender_fee_amount"],
+      }),
+      PbgEntry.findAll({
+        where: this.pbgScopeWhere(scopeIds),
+        attributes: ["pbg_amount"],
+      }),
     ]);
 
     const sum = (rows, key) =>
@@ -50,7 +294,7 @@ class DashboardRepository {
     };
   }
 
-  async getOverviewCounts() {
+  async getOverviewCounts(scopeIds = null) {
     const [
       firms,
       activeFirms,
@@ -68,13 +312,13 @@ class DashboardRepository {
       Firm.count({ where: { is_active: true } }),
       ProcurementEmployee.count(),
       ProcurementEmployee.count({ where: { is_active: true } }),
-      Indent.count(),
-      ProcurementCase.count(),
-      Tender.count(),
-      PurchaseOrder.count(),
-      TenderEmdEntry.count(),
-      PbgEntry.count(),
-      Empanelment.count(),
+      Indent.count({ where: this.scopeWhere(scopeIds, "indentIds") }),
+      ProcurementCase.count({ where: this.scopeWhere(scopeIds, "caseIds") }),
+      Tender.count({ where: this.scopeWhere(scopeIds, "tenderIds") }),
+      PurchaseOrder.count({ where: this.scopeWhere(scopeIds, "poIds") }),
+      TenderEmdEntry.count({ where: this.emdScopeWhere(scopeIds) }),
+      PbgEntry.count({ where: this.pbgScopeWhere(scopeIds) }),
+      scopeIds ? 0 : Empanelment.count(),
     ]);
 
     return {
@@ -92,7 +336,9 @@ class DashboardRepository {
     };
   }
 
-  async getIndentMetrics() {
+  async getIndentMetrics(scopeIds = null) {
+    const indentItemScope = this.scopeWhere(scopeIds, "indentItemIds");
+    const indentScope = this.scopeWhere(scopeIds, "indentIds");
     const [
       unassignedItems,
       itemsWithoutEstimate,
@@ -100,27 +346,27 @@ class DashboardRepository {
       activeIndents,
     ] = await Promise.all([
       IndentItem.count({
-        where: {
+        where: this.andWhere(indentItemScope, {
           [Op.or]: [
             { assigned_procurement_officer_id: null },
             { assignment_status: "unassigned" },
           ],
-        },
+        }),
       }),
       IndentItem.count({
-        where: {
+        where: this.andWhere(indentItemScope, {
           [Op.or]: [{ estimated_amount: null }, { estimated_rate: null }],
-        },
+        }),
       }),
       IndentItem.count({
-        where: { administrative_approval_required: true },
+        where: this.andWhere(indentItemScope, { administrative_approval_required: true }),
       }),
       Indent.count({
-        where: {
+        where: this.andWhere(indentScope, {
           status: {
             [Op.notIn]: ["closed", "cancelled", "completed"],
           },
-        },
+        }),
       }),
     ]);
 
@@ -132,16 +378,17 @@ class DashboardRepository {
     };
   }
 
-  async getProcurementCaseMetrics() {
+  async getProcurementCaseMetrics(scopeIds = null) {
     const tenderModes = ["tender_gem", "tender_nic", "tender_split"];
+    const caseScope = this.scopeWhere(scopeIds, "caseIds");
     const [casesWithoutOfficer, tenderModeCases] = await Promise.all([
       ProcurementCase.count({
-        where: {
+        where: this.andWhere(caseScope, {
           [Op.or]: [{ procurement_officer_id: null }, { procurement_officer_id: { [Op.is]: null } }],
-        },
+        }),
       }),
       ProcurementCase.findAll({
-        where: { procurement_mode: { [Op.in]: tenderModes } },
+        where: this.andWhere(caseScope, { procurement_mode: { [Op.in]: tenderModes } }),
         include: [
           {
             model: Tender,
@@ -163,8 +410,9 @@ class DashboardRepository {
     };
   }
 
-  async getTenderAttentionMetrics() {
+  async getTenderAttentionMetrics(scopeIds = null) {
     const tenders = await Tender.findAll({
+      where: this.scopeWhere(scopeIds, "tenderIds"),
       include: [
         {
           model: TenderVendor,
@@ -228,12 +476,13 @@ class DashboardRepository {
     return metrics;
   }
 
-  async getEmdMetrics() {
+  async getEmdMetrics(scopeIds = null) {
+    const emdScope = this.emdScopeWhere(scopeIds);
     const [pendingRefunds, notSubmitted, exempted, transferredToHartron] = await Promise.all([
-      TenderEmdEntry.count({ where: { refund_status: "pending" } }),
-      TenderEmdEntry.count({ where: { emd_submission_status: "not_submitted" } }),
-      TenderEmdEntry.count({ where: { emd_submission_status: "exempted" } }),
-      TenderEmdEntry.count({ where: { emd_submission_status: "transferred_to_hartron" } }),
+      TenderEmdEntry.count({ where: this.andWhere(emdScope, { refund_status: "pending" }) }),
+      TenderEmdEntry.count({ where: this.andWhere(emdScope, { emd_submission_status: "not_submitted" }) }),
+      TenderEmdEntry.count({ where: this.andWhere(emdScope, { emd_submission_status: "exempted" }) }),
+      TenderEmdEntry.count({ where: this.andWhere(emdScope, { emd_submission_status: "transferred_to_hartron" }) }),
     ]);
 
     return {
@@ -244,8 +493,9 @@ class DashboardRepository {
     };
   }
 
-  async getPurchaseOrderAndPbgMetrics() {
+  async getPurchaseOrderAndPbgMetrics(scopeIds = null) {
     const purchaseOrders = await PurchaseOrder.findAll({
+      where: this.scopeWhere(scopeIds, "poIds"),
       include: [{ model: PbgEntry, as: "pbg_entries", required: false }],
       order: [["id", "DESC"]],
     });
@@ -255,6 +505,7 @@ class DashboardRepository {
     in30Days.setDate(in30Days.getDate() + 30);
 
     const pbgEntries = await PbgEntry.findAll({
+      where: this.pbgScopeWhere(scopeIds),
       include: [
         { model: PurchaseOrder, as: "purchase_order", required: false },
         { model: FirmModel, as: "firm", required: false },
@@ -304,7 +555,17 @@ class DashboardRepository {
     };
   }
 
-  async getEmpanelmentMetrics() {
+  async getEmpanelmentMetrics(scopeIds = null) {
+    if (scopeIds) {
+      return {
+        active_empanelments: 0,
+        expiring_in_30_days: 0,
+        expiring_in_60_days: 0,
+        expired_empanelments: 0,
+        category_coverage: 0,
+      };
+    }
+
     const today = new Date();
     const in30Days = new Date();
     in30Days.setDate(in30Days.getDate() + 30);
@@ -348,34 +609,40 @@ class DashboardRepository {
     };
   }
 
-  async getRecentActivity() {
+  async getRecentActivity(scopeIds = null) {
     const [indents, cases, tenders, purchaseOrders, empanelments] = await Promise.all([
       Indent.findAll({
+        where: this.scopeWhere(scopeIds, "indentIds"),
         attributes: ["id", "indent_no", "department_name", "status", "received_date", "created_at", "createdAt"],
         order: [["id", "DESC"]],
         limit: 5,
       }),
       ProcurementCase.findAll({
+        where: this.scopeWhere(scopeIds, "caseIds"),
         attributes: ["id", "case_no", "title", "status", "procurement_mode", "created_at", "createdAt"],
         order: [["id", "DESC"]],
         limit: 5,
       }),
       Tender.findAll({
+        where: this.scopeWhere(scopeIds, "tenderIds"),
         attributes: ["id", "tender_title", "portal_type", "status", "current_submission_deadline", "created_at", "createdAt"],
         order: [["id", "DESC"]],
         limit: 5,
       }),
       PurchaseOrder.findAll({
+        where: this.scopeWhere(scopeIds, "poIds"),
         attributes: ["id", "po_no", "po_date", "status", "po_value", "created_at", "createdAt"],
         order: [["id", "DESC"]],
         limit: 5,
       }),
-      Empanelment.findAll({
-        attributes: ["id", "empanelment_no", "status", "current_valid_upto", "created_at", "createdAt"],
-        include: [{ model: FirmModel, as: "firm", attributes: ["firm_name"], required: false }],
-        order: [["id", "DESC"]],
-        limit: 5,
-      }),
+      scopeIds
+        ? []
+        : Empanelment.findAll({
+            attributes: ["id", "empanelment_no", "status", "current_valid_upto", "created_at", "createdAt"],
+            include: [{ model: FirmModel, as: "firm", attributes: ["firm_name"], required: false }],
+            order: [["id", "DESC"]],
+            limit: 5,
+          }),
     ]);
 
     return {

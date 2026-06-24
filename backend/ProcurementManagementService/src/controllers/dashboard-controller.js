@@ -2,9 +2,9 @@ const DashboardService = require("../services/dashboard-service");
 
 const service = new DashboardService();
 
-const getSummary = async (_req, res) => {
+const getSummary = async (req, res) => {
   try {
-    const data = await service.getSummary();
+    const data = await service.getSummary(req.query || {});
     return res.status(200).json({
       success: true,
       message: "Dashboard summary fetched successfully.",

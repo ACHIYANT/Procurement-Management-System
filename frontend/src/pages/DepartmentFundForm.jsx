@@ -64,6 +64,11 @@ function Field({ label, children, error }) {
   );
 }
 
+const getDepartmentLikeOptions = (options = []) =>
+  (Array.isArray(options) ? options : []).filter(
+    (entry) => entry.group === "Department" || Number(entry.depth || 0) > 0,
+  );
+
 export default function DepartmentFundForm() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -105,13 +110,23 @@ export default function DepartmentFundForm() {
     [origin],
   );
 
-  const departmentOptions = useMemo(
-    () =>
-      getHaryanaGovernmentMasterOptions().filter(
-        (entry) => entry.group === "Department" || entry.depth > 0,
-      ),
-    [],
+  const [departmentOptions, setDepartmentOptions] = useState(() =>
+    getDepartmentLikeOptions(getHaryanaGovernmentMasterOptions()),
   );
+
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const data = await procurementRequest("/government-organizations?activeOnly=true");
+        const nextOptions = getDepartmentLikeOptions(data?.options);
+        if (nextOptions.length) setDepartmentOptions(nextOptions);
+      } catch {
+        // Keep the bundled Haryana master as a fallback for older deployments.
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
