@@ -18,6 +18,7 @@ import {
   Home,
   LogOut,
   Menu,
+  Network,
   PackageCheck,
   ReceiptIndianRupee,
   Settings,
@@ -162,6 +163,12 @@ const navigationGroups = [
         label: "Specification Templates",
         path: "/specification-templates",
         icon: Sparkles,
+        roles: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
+      },
+      {
+        label: "Organizations",
+        path: "/government-organizations",
+        icon: Network,
         roles: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
       },
       {

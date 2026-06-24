@@ -1257,8 +1257,9 @@ export default function IndentDetail() {
                                       key={employee.id}
                                       value={employee.id}
                                     >
-                                      {employee.employee_name} (
-                                      {employee.empcode})
+                                      {[employee.employee_name, employee.designation]
+                                        .filter(Boolean)
+                                        .join(", ")}
                                     </option>
                                   ))}
                                 </select>

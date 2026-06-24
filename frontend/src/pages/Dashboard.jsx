@@ -14,6 +14,12 @@ import AppLoader from "@/components/AppLoader";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCompactIndianAmount, formatCurrencyINR } from "@/lib/amount-format";
 import { procurementRequest } from "@/lib/procurement-api";
+import {
+  getCurrentUserProfile,
+  getCurrentUserRoles,
+  hasAnyRole,
+  PMS_ROLES,
+} from "@/lib/roles";
 
 const AUTO_REFRESH_MS = 60 * 1000;
 
@@ -231,14 +237,31 @@ function RingChart({ title, items = [], totalLabel }) {
 }
 
 export default function Dashboard() {
+  const [currentRoles] = useState(() => getCurrentUserRoles());
+  const [currentUser] = useState(() => getCurrentUserProfile());
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const isAdminDashboard = useMemo(
+    () => hasAnyRole(currentRoles, [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN]),
+    [currentRoles],
+  );
 
   const loadDashboard = useCallback(async ({ silent = false } = {}) => {
     try {
       if (!silent) setLoading(true);
-      const data = await procurementRequest("/dashboard");
+      const params = new URLSearchParams();
+      if (!isAdminDashboard) {
+        const empcode = String(
+          currentUser?.empcode || localStorage.getItem("empcode") || "",
+        ).trim();
+        const employeeId = String(currentUser?.procurement_employee_id || "").trim();
+        if (empcode) params.set("empcode", empcode);
+        if (employeeId) params.set("employee_id", employeeId);
+        if (currentRoles.length) params.set("roles", currentRoles.join(","));
+      }
+      const query = params.toString();
+      const data = await procurementRequest(`/dashboard${query ? `?${query}` : ""}`);
       setDashboard(data);
       setError("");
     } catch (loadError) {
@@ -246,7 +269,7 @@ export default function Dashboard() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [currentRoles, currentUser, isAdminDashboard]);
 
   useEffect(() => {
     let alive = true;

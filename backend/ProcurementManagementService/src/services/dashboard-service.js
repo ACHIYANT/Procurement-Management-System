@@ -5,7 +5,8 @@ class DashboardService {
     this.repository = new DashboardRepository();
   }
 
-  async getSummary() {
+  async getSummary(query = {}) {
+    const scopeIds = await this.repository.resolveDashboardScope(query);
     const [
       overview,
       valueFlow,
@@ -17,19 +18,20 @@ class DashboardService {
       empanelmentHealth,
       recentActivity,
     ] = await Promise.all([
-      this.repository.getOverviewCounts(),
-      this.repository.getValueMetrics(),
-      this.repository.getIndentMetrics(),
-      this.repository.getProcurementCaseMetrics(),
-      this.repository.getTenderAttentionMetrics(),
-      this.repository.getEmdMetrics(),
-      this.repository.getPurchaseOrderAndPbgMetrics(),
-      this.repository.getEmpanelmentMetrics(),
-      this.repository.getRecentActivity(),
+      this.repository.getOverviewCounts(scopeIds),
+      this.repository.getValueMetrics(scopeIds),
+      this.repository.getIndentMetrics(scopeIds),
+      this.repository.getProcurementCaseMetrics(scopeIds),
+      this.repository.getTenderAttentionMetrics(scopeIds),
+      this.repository.getEmdMetrics(scopeIds),
+      this.repository.getPurchaseOrderAndPbgMetrics(scopeIds),
+      this.repository.getEmpanelmentMetrics(scopeIds),
+      this.repository.getRecentActivity(scopeIds),
     ]);
 
     return {
       generated_at: new Date().toISOString(),
+      scope: scopeIds ? "user" : "global",
       overview,
       value_flow: valueFlow,
       indent_health: indentHealth,
