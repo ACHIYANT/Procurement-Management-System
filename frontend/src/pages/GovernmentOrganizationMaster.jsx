@@ -54,6 +54,30 @@ const toCode = (value) =>
     .replace(/^_+|_+$/g, "")
     .replace(/_+/g, "_");
 
+const getDescendantCodes = (node, codes = new Set()) => {
+  for (const child of node?.children || []) {
+    codes.add(child.organization_code);
+    getDescendantCodes(child, codes);
+  }
+  return codes;
+};
+
+const flattenOrganizationTree = (nodes = [], { excludedCodes = new Set(), depth = 0 } = {}) =>
+  (Array.isArray(nodes) ? nodes : []).flatMap((node) => {
+    if (excludedCodes.has(node.organization_code)) return [];
+    return [
+      {
+        ...node,
+        depth,
+        hierarchyLabel: `${depth > 0 ? `${"— ".repeat(depth)}` : ""}${node.organization_name}`,
+      },
+      ...flattenOrganizationTree(node.children, {
+        excludedCodes,
+        depth: depth + 1,
+      }),
+    ];
+  });
+
 const fieldLabelClass =
   "text-[11px] font-semibold uppercase tracking-[0.22em] text-black/42";
 const inputClass =
@@ -160,6 +184,45 @@ export default function GovernmentOrganizationMaster() {
     );
   }, [master.rows]);
 
+  const excludedParentCodes = useMemo(() => {
+    if (!form.id) return new Set();
+    const selected = master.rows.find((row) => String(row.id) === String(form.id));
+    if (!selected?.organization_code) return new Set();
+    const selectedTreeNode = master.tree
+      .map((node) => {
+        const findNode = (current) => {
+          if (current.organization_code === selected.organization_code) return current;
+          for (const child of current.children || []) {
+            const found = findNode(child);
+            if (found) return found;
+          }
+          return null;
+        };
+        return findNode(node);
+      })
+      .find(Boolean);
+
+    return new Set([
+      selected.organization_code,
+      ...Array.from(getDescendantCodes(selectedTreeNode)),
+    ]);
+  }, [form.id, master.rows, master.tree]);
+
+  const parentOptions = useMemo(
+    () => flattenOrganizationTree(master.tree, { excludedCodes: excludedParentCodes }),
+    [excludedParentCodes, master.tree],
+  );
+
+  const selectedParent = useMemo(
+    () =>
+      parentOptions.find(
+        (option) => option.organization_code === form.parent_code,
+      ) || null,
+    [form.parent_code, parentOptions],
+  );
+
+  const isRootOrganization = !form.parent_code;
+
   const filteredTree = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return master.tree;
@@ -187,6 +250,18 @@ export default function GovernmentOrganizationMaster() {
       }
       return next;
     });
+  };
+
+  const setAsRootOrganization = () => {
+    setForm((current) => ({ ...current, parent_code: "" }));
+  };
+
+  const selectFirstAvailableParent = () => {
+    setForm((current) => ({
+      ...current,
+      parent_code:
+        current.parent_code || parentOptions[0]?.organization_code || "",
+    }));
   };
 
   const editOrganization = (organization) => {
@@ -336,23 +411,108 @@ export default function GovernmentOrganizationMaster() {
                     </label>
                   </div>
 
-                  <label className="space-y-1.5">
-                    <span className={fieldLabelClass}>Parent Organization</span>
-                    <select
-                      value={form.parent_code}
-                      onChange={updateField("parent_code")}
-                      className={`${inputClass} w-full px-3 text-sm outline-none`}
-                    >
-                      <option value="">No parent / root organization</option>
-                      {master.options
-                        .filter((option) => String(option.id) !== String(form.id))
-                        .map((option) => (
-                          <option key={option.rawValue} value={option.rawValue}>
-                            {option.label} ({option.group})
-                          </option>
-                        ))}
-                    </select>
-                  </label>
+                  <div className="space-y-3">
+                    <div>
+                      <span className={fieldLabelClass}>Hierarchy Placement</span>
+                      <p className="mt-1 text-sm leading-6 text-black/54">
+                        If the parent does not exist yet, save it first as a top-level parent. Then add the child organization under that parent.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={setAsRootOrganization}
+                        className={`rounded-[22px] border p-4 text-left transition ${
+                          isRootOrganization
+                            ? "border-blue-200 bg-blue-50 shadow-[0_18px_38px_-30px_rgba(0,113,227,0.85)] ring-2 ring-blue-100"
+                            : "border-black/8 bg-white hover:bg-[#f7fbff]"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${
+                              isRootOrganization
+                                ? "bg-[#0071e3] text-white"
+                                : "bg-[#f5f5f7] text-black/62"
+                            }`}
+                          >
+                            <Network className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <p className="font-semibold text-[#1d1d1f]">
+                              Top-level parent
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-black/54">
+                              Use this for a new department, university, board, corporation, or root organization.
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={selectFirstAvailableParent}
+                        disabled={!parentOptions.length}
+                        className={`rounded-[22px] border p-4 text-left transition ${
+                          !isRootOrganization
+                            ? "border-emerald-200 bg-emerald-50 shadow-[0_18px_38px_-30px_rgba(16,185,129,0.75)] ring-2 ring-emerald-100"
+                            : "border-black/8 bg-white hover:bg-[#f7fbff]"
+                        } ${!parentOptions.length ? "cursor-not-allowed opacity-60" : ""}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${
+                              !isRootOrganization
+                                ? "bg-emerald-600 text-white"
+                                : "bg-[#f5f5f7] text-black/62"
+                            }`}
+                          >
+                            <Building2 className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <p className="font-semibold text-[#1d1d1f]">
+                              Child organization
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-black/54">
+                              Use this for offices or bodies that report under an existing parent.
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+
+                    {!isRootOrganization || parentOptions.length ? (
+                      <label className="space-y-1.5">
+                        <span className={fieldLabelClass}>Select Existing Parent</span>
+                        <select
+                          value={form.parent_code}
+                          onChange={updateField("parent_code")}
+                          disabled={isRootOrganization}
+                          className={`${inputClass} w-full px-3 text-sm outline-none ${
+                            isRootOrganization ? "cursor-not-allowed opacity-60" : ""
+                          }`}
+                        >
+                          <option value="">Select parent organization</option>
+                          {parentOptions.map((option) => (
+                            <option
+                              key={option.organization_code}
+                              value={option.organization_code}
+                            >
+                              {option.hierarchyLabel} ({option.organization_group})
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs leading-5 text-black/46">
+                          {isRootOrganization
+                            ? "Parent selector is disabled because this record will be saved as a top-level parent."
+                            : selectedParent
+                              ? `Selected parent: ${selectedParent.organization_name} (${selectedParent.organization_group})`
+                              : "Choose the parent in the same order shown in the organization directory."}
+                        </p>
+                      </label>
+                    ) : null}
+                  </div>
 
                   <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
                     <label className="space-y-1.5">
