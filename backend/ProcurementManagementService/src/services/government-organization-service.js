@@ -59,6 +59,16 @@ const compareByDisplay = (left, right) => {
   );
 };
 
+const collectDescendantCodes = (organizationCode, rows = [], collected = new Set()) => {
+  const children = rows.filter((row) => row.parent_code === organizationCode);
+  for (const child of children) {
+    if (collected.has(child.organization_code)) continue;
+    collected.add(child.organization_code);
+    collectDescendantCodes(child.organization_code, rows, collected);
+  }
+  return collected;
+};
+
 class GovernmentOrganizationService {
   constructor() {
     this.repository = new GovernmentOrganizationRepository();
@@ -199,6 +209,15 @@ class GovernmentOrganizationService {
         const error = new Error("Selected parent organization does not exist.");
         error.statusCode = 400;
         throw error;
+      }
+      if (existing) {
+        const rows = await this.repository.list({ activeOnly: false });
+        const descendants = collectDescendantCodes(existing.organization_code, rows);
+        if (descendants.has(parentCode)) {
+          const error = new Error("Parent organization cannot be one of its child organizations.");
+          error.statusCode = 400;
+          throw error;
+        }
       }
     }
 
