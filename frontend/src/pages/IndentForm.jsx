@@ -58,12 +58,66 @@ const UNIT_OPTIONS = [
   "Bundle",
 ];
 
+const PROCUREMENT_SCOPE_OPTIONS = [
+  {
+    value: "standard_quantity",
+    label: "Standard quantity purchase",
+    helper: "Normal indent item with quantity and unit.",
+  },
+  {
+    value: "amc",
+    label: "AMC",
+    helper: "Annual maintenance contract with period.",
+  },
+  {
+    value: "camc",
+    label: "CAMC",
+    helper: "Comprehensive annual maintenance contract with period.",
+  },
+  {
+    value: "rate_contract_quantity",
+    label: "Rate Contract - quantity based",
+    helper: "Example: MFP up to 2000 units for 1 year.",
+  },
+  {
+    value: "rate_contract_value",
+    label: "Rate Contract - value based",
+    helper: "Example: Computer RC up to Rs. 150 Cr for 9 months.",
+  },
+];
+
+const CONTRACT_PERIOD_UNITS = [
+  { value: "months", label: "Months" },
+  { value: "years", label: "Years" },
+  { value: "days", label: "Days" },
+];
+const ADMINISTRATIVE_APPROVAL_THRESHOLD = 10000000;
+
+const getProcurementScopeLabel = (value) =>
+  PROCUREMENT_SCOPE_OPTIONS.find((option) => option.value === value)?.label ||
+  "Standard quantity purchase";
+
+const isValueBasedRateContract = (item = {}) =>
+  item.procurement_scope_type === "rate_contract_value";
+
+const requiresContractPeriod = (item = {}) =>
+  ["amc", "camc", "rate_contract_quantity", "rate_contract_value"].includes(
+    item.procurement_scope_type,
+  );
+const shouldAutoRequireAdministrativeApproval = (item = {}) =>
+  Number(item.contract_value_limit || 0) >= ADMINISTRATIVE_APPROVAL_THRESHOLD;
+
 const createBlankItem = () => ({
   category_id: "",
   subcategory_id: "",
   item_name: "",
   quantity: "",
   unit: "",
+  procurement_scope_type: "standard_quantity",
+  contract_period_value: "",
+  contract_period_unit: "months",
+  contract_value_limit: "",
+  scope_remarks: "",
   specification: "",
   specific_make_required: "no",
   preferred_make: "",
@@ -115,6 +169,12 @@ const mapIndentToForm = (indent = {}) => ({
         item_name: item.item_name || "",
         quantity: toQuantityInput(item.quantity),
         unit: item.unit || "",
+        procurement_scope_type:
+          item.procurement_scope_type || "standard_quantity",
+        contract_period_value: toQuantityInput(item.contract_period_value),
+        contract_period_unit: item.contract_period_unit || "months",
+        contract_value_limit: toQuantityInput(item.contract_value_limit),
+        scope_remarks: item.scope_remarks || "",
         specification: item.specification || "",
         specific_make_required: item.specific_make_required ? "yes" : "no",
         preferred_make: item.preferred_make || "",
@@ -529,6 +589,17 @@ export default function IndentForm() {
         if (field === "specific_make_required" && value === "no") {
           nextItem.preferred_make = "";
         }
+        if (
+          field === "contract_value_limit" ||
+          field === "procurement_scope_type"
+        ) {
+          nextItem.administrative_approval_status =
+            shouldAutoRequireAdministrativeApproval(nextItem)
+              ? "auto_required"
+              : nextItem.administrative_approval_status === "auto_required"
+                ? "not_required"
+                : nextItem.administrative_approval_status;
+        }
         return nextItem;
       });
       return { ...current, items };
@@ -676,9 +747,33 @@ export default function IndentForm() {
         { name: "item_name", label: "Item name" },
         { name: "category_id", label: "Category" },
         { name: "subcategory_id", label: "Sub category" },
-        { name: "quantity", label: "Quantity" },
-        { name: "unit", label: "Unit" },
       ]);
+      if (!isValueBasedRateContract(item)) {
+        Object.assign(
+          nextErrors,
+          buildRequiredErrors(item, [
+            { name: "quantity", label: "Quantity" },
+            { name: "unit", label: "Unit" },
+          ]),
+        );
+      }
+      if (requiresContractPeriod(item)) {
+        Object.assign(
+          nextErrors,
+          buildRequiredErrors(item, [
+            { name: "contract_period_value", label: "Contract period" },
+            { name: "contract_period_unit", label: "Contract period unit" },
+          ]),
+        );
+      }
+      if (isValueBasedRateContract(item)) {
+        Object.assign(
+          nextErrors,
+          buildRequiredErrors(item, [
+            { name: "contract_value_limit", label: "Contract value limit" },
+          ]),
+        );
+      }
       if (item.specific_make_required === "yes" && !String(item.preferred_make || "").trim()) {
         nextErrors.preferred_make = "Specific make / company is required.";
       }
@@ -712,6 +807,13 @@ export default function IndentForm() {
         item.item_name,
         item.quantity,
         item.unit,
+        item.procurement_scope_type !== "standard_quantity"
+          ? item.procurement_scope_type
+          : "",
+        item.contract_period_value,
+        item.contract_period_unit,
+        item.contract_value_limit,
+        item.scope_remarks,
         item.specification,
         item.preferred_make,
         item.remarks,
@@ -731,6 +833,18 @@ export default function IndentForm() {
     cfms_no: sourceForm.cfms_no || null,
     items: sourceForm.items.map((item) => ({
       ...item,
+      quantity: isValueBasedRateContract(item) ? "" : item.quantity,
+      unit: isValueBasedRateContract(item) ? "" : item.unit,
+      contract_period_value: requiresContractPeriod(item)
+        ? item.contract_period_value
+        : "",
+      contract_period_unit: requiresContractPeriod(item)
+        ? item.contract_period_unit || "months"
+        : "",
+      contract_value_limit: isValueBasedRateContract(item)
+        ? item.contract_value_limit
+        : "",
+      scope_remarks: requiresContractPeriod(item) ? item.scope_remarks : "",
       administrative_approval_required: requiresAdministrativeApproval(item),
     })),
   });
@@ -1095,6 +1209,10 @@ export default function IndentForm() {
                               {item.quantity || item.unit
                                 ? ` | ${item.quantity || "0"} ${item.unit || ""}`.trim()
                                 : ""}
+                              {item.procurement_scope_type &&
+                              item.procurement_scope_type !== "standard_quantity"
+                                ? ` | ${getProcurementScopeLabel(item.procurement_scope_type)}`
+                                : ""}
                               {itemCategory?.category_name
                                 ? ` | ${itemCategory.category_name}`
                                 : ""}
@@ -1199,6 +1317,29 @@ export default function IndentForm() {
                             )}
                           />
                         </Field>
+                        <Field label="Procurement Scope">
+                          <select
+                            value={item.procurement_scope_type || "standard_quantity"}
+                            onChange={updateItem(index, "procurement_scope_type")}
+                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                          >
+                            {PROCUREMENT_SCOPE_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {
+                              PROCUREMENT_SCOPE_OPTIONS.find(
+                                (option) =>
+                                  option.value ===
+                                  (item.procurement_scope_type ||
+                                    "standard_quantity"),
+                              )?.helper
+                            }
+                          </p>
+                        </Field>
                         <Field
                           label="Quantity"
                           error={errors.items?.[index]?.quantity}
@@ -1209,6 +1350,12 @@ export default function IndentForm() {
                             step="1"
                             value={item.quantity}
                             onChange={updateItem(index, "quantity")}
+                            disabled={isValueBasedRateContract(item)}
+                            placeholder={
+                              isValueBasedRateContract(item)
+                                ? "Not required for value RC"
+                                : ""
+                            }
                             className={invalidControlClass(
                               errors.items?.[index]?.quantity,
                             )}
@@ -1218,6 +1365,7 @@ export default function IndentForm() {
                           <select
                             value={item.unit}
                             onChange={updateItem(index, "unit")}
+                            disabled={isValueBasedRateContract(item)}
                             className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
                               errors.items?.[index]?.unit,
                             )}`}
@@ -1230,6 +1378,67 @@ export default function IndentForm() {
                             ))}
                           </select>
                         </Field>
+                        {requiresContractPeriod(item) ? (
+                          <>
+                            <Field
+                              label="Contract Period"
+                              error={errors.items?.[index]?.contract_period_value}
+                            >
+                              <Input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={item.contract_period_value}
+                                onChange={updateItem(
+                                  index,
+                                  "contract_period_value",
+                                )}
+                                className={invalidControlClass(
+                                  errors.items?.[index]?.contract_period_value,
+                                )}
+                              />
+                            </Field>
+                            <Field
+                              label="Period Unit"
+                              error={errors.items?.[index]?.contract_period_unit}
+                            >
+                              <select
+                                value={item.contract_period_unit || "months"}
+                                onChange={updateItem(
+                                  index,
+                                  "contract_period_unit",
+                                )}
+                                className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
+                                  errors.items?.[index]?.contract_period_unit,
+                                )}`}
+                              >
+                                {CONTRACT_PERIOD_UNITS.map((unit) => (
+                                  <option key={unit.value} value={unit.value}>
+                                    {unit.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                          </>
+                        ) : null}
+                        {isValueBasedRateContract(item) ? (
+                          <Field
+                            label="Contract Value Limit"
+                            error={errors.items?.[index]?.contract_value_limit}
+                          >
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.contract_value_limit}
+                              onChange={updateItem(index, "contract_value_limit")}
+                              placeholder="Example: 1500000000"
+                              className={invalidControlClass(
+                                errors.items?.[index]?.contract_value_limit,
+                              )}
+                            />
+                          </Field>
+                        ) : null}
                         <Field label="Specific Make Required?">
                           <select
                             value={item.specific_make_required}
@@ -1269,6 +1478,15 @@ export default function IndentForm() {
                             onChange={updateItem(index, "remarks")}
                           />
                         </Field>
+                        {requiresContractPeriod(item) ? (
+                          <Field label="Scope Remarks">
+                            <Input
+                              value={item.scope_remarks}
+                              onChange={updateItem(index, "scope_remarks")}
+                              placeholder="Example: AMC for installed base, RC validity, service coverage"
+                            />
+                          </Field>
+                        ) : null}
                         {item.specific_make_required === "yes" ? (
                           <>
                             <Field

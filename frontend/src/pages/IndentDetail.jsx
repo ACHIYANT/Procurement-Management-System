@@ -46,6 +46,22 @@ const formatQuantity = (value) => {
   if (Number.isNaN(numeric)) return value || "0";
   return Number.isInteger(numeric) ? String(numeric) : String(numeric);
 };
+const procurementScopeLabels = {
+  standard_quantity: "Standard Purchase",
+  amc: "AMC",
+  camc: "CAMC",
+  rate_contract_quantity: "RC - Quantity",
+  rate_contract_value: "RC - Value",
+};
+const getProcurementScopeLabel = (value) =>
+  procurementScopeLabels[String(value || "standard_quantity")] ||
+  "Standard Purchase";
+const isValueRateContract = (item = {}) =>
+  item.procurement_scope_type === "rate_contract_value";
+const formatContractPeriod = (item = {}) => {
+  if (!item.contract_period_value || !item.contract_period_unit) return "NA";
+  return `${formatQuantity(item.contract_period_value)} ${label(item.contract_period_unit)}`;
+};
 const assignmentChipClass = (status) => {
   const normalized = String(status || "").toLowerCase();
   if (normalized === "unassigned") return "bg-rose-100 text-rose-700";
@@ -1106,7 +1122,16 @@ export default function IndentDetail() {
                     const categoryName = item.category?.category_name || "Uncategorized";
                     const subcategoryName = item.subcategory?.subcategory_name || "NA";
                     const primaryFacts = [
-                      ["Quantity", `${formatQuantity(item.quantity)} ${item.unit || ""}`],
+                      ["Scope", getProcurementScopeLabel(item.procurement_scope_type)],
+                      isValueRateContract(item)
+                        ? ["Value Limit", money(item.contract_value_limit)]
+                        : ["Quantity", `${formatQuantity(item.quantity)} ${item.unit || ""}`],
+                      [
+                        "Contract Period",
+                        item.procurement_scope_type === "standard_quantity"
+                          ? "NA"
+                          : formatContractPeriod(item),
+                      ],
                       ["Estimate", compactMoney(item.estimated_amount), money(item.estimated_amount)],
                       [
                         "Admin Approval",
@@ -1122,6 +1147,9 @@ export default function IndentDetail() {
                       ["Category", categoryName],
                       ["Sub category", subcategoryName],
                       ["Specific make", item.specific_make_required ? "Yes" : "No"],
+                      ...(item.scope_remarks
+                        ? [["Scope note", item.scope_remarks]]
+                        : []),
                       [
                         "Assigned",
                         item.procurement_officer?.employee_name || "Unassigned",
