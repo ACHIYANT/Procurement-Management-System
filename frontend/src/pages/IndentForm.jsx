@@ -40,6 +40,7 @@ import {
 } from "@/lib/form-validation";
 import InfoTooltip from "../components/InfoTooltip";
 import { getCurrentUserProfile } from "@/lib/roles";
+import { formatIndentItemScopeSummary } from "@/lib/indent-item-display";
 
 const UNIT_OPTIONS = [
   "Nos",
@@ -92,10 +93,6 @@ const CONTRACT_PERIOD_UNITS = [
   { value: "days", label: "Days" },
 ];
 const ADMINISTRATIVE_APPROVAL_THRESHOLD = 10000000;
-
-const getProcurementScopeLabel = (value) =>
-  PROCUREMENT_SCOPE_OPTIONS.find((option) => option.value === value)?.label ||
-  "Standard quantity purchase";
 
 const isValueBasedRateContract = (item = {}) =>
   item.procurement_scope_type === "rate_contract_value";
@@ -1206,13 +1203,7 @@ export default function IndentForm() {
                             </span>
                             <span className="mt-1 block truncate text-sm text-slate-700">
                               {item.item_name || "Untitled item"}
-                              {item.quantity || item.unit
-                                ? ` | ${item.quantity || "0"} ${item.unit || ""}`.trim()
-                                : ""}
-                              {item.procurement_scope_type &&
-                              item.procurement_scope_type !== "standard_quantity"
-                                ? ` | ${getProcurementScopeLabel(item.procurement_scope_type)}`
-                                : ""}
+                              {` | ${formatIndentItemScopeSummary(item)}`}
                               {itemCategory?.category_name
                                 ? ` | ${itemCategory.category_name}`
                                 : ""}

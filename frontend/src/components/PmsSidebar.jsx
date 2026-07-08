@@ -312,7 +312,7 @@ function SidebarContent({ onNavigate, collapsed = false, onToggle }) {
             }`}
             title={collapsed ? userName : undefined}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[1.1rem] bg-[#0071e3] text-sm font-bold text-white">
                 {getInitials(userName)}
               </div>
@@ -344,9 +344,9 @@ function SidebarContent({ onNavigate, collapsed = false, onToggle }) {
               <BriefcaseBusiness className="h-6 w-6" />
             </div>
             {!collapsed ? (
-              <div>
+              <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-[0.3em] text-black/38">PMS</p>
-                <p className="text-sm font-semibold">Procurement Control</p>
+                <p className="truncate text-sm font-semibold">Procurement Control</p>
               </div>
             ) : null}
           </div>
@@ -378,7 +378,7 @@ function SidebarContent({ onNavigate, collapsed = false, onToggle }) {
                   onClick={() => setExpanded(isOpen ? "" : group.title)}
                   className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.24em] text-black/42 hover:bg-[#f5f5f7]"
                 >
-                  <span>{group.title}</span>
+                  <span className="min-w-0 truncate">{group.title}</span>
                   {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 </button>
                 <AnimatePresence initial={false}>

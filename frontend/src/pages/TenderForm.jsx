@@ -15,6 +15,7 @@ import {
   uploadProcurementFile,
 } from "@/lib/procurement-api";
 import { formatCurrencyINR } from "@/lib/amount-format";
+import { formatIndentItemScopeSummary } from "@/lib/indent-item-display";
 import {
   buildRequiredErrors,
   clearFieldError,
@@ -720,18 +721,18 @@ export default function TenderForm() {
                                 </p>
                               </td>
                               <td className="px-4 py-3 text-black/62">
-                                <p>
-                                  {formatQuantity(indentItem.quantity)}{" "}
-                                  {indentItem.unit || ""}
-                                </p>
-                                <p className="mt-1 text-xs text-black/42">
-                                  Used:{" "}
-                                  {formatQuantity(alreadyTenderedQuantity)} |{" "}
-                                  Remaining:{" "}
-                                  <span className="font-semibold text-[#1d1d1f]">
-                                    {formatQuantity(remainingQuantity)}
-                                  </span>
-                                </p>
+                                <p>{formatIndentItemScopeSummary(indentItem)}</p>
+                                {indentItem.procurement_scope_type ===
+                                "rate_contract_value" ? null : (
+                                  <p className="mt-1 text-xs text-black/42">
+                                    Used:{" "}
+                                    {formatQuantity(alreadyTenderedQuantity)} |{" "}
+                                    Remaining:{" "}
+                                    <span className="font-semibold text-[#1d1d1f]">
+                                      {formatQuantity(remainingQuantity)}
+                                    </span>
+                                  </p>
+                                )}
                               </td>
                               <td className="px-4 py-3">
                                 {form.tender_type === "rate_contract" &&

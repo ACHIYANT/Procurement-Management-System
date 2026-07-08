@@ -7,6 +7,10 @@ import PopupMessage from "@/components/PopupMessage";
 import { Button } from "@/components/ui/button";
 import { procurementRequest } from "@/lib/procurement-api";
 import { canAccessFeature, getCurrentUserRoles } from "@/lib/roles";
+import {
+  formatIndentItemPrimaryMeasure,
+  getIndentItemScopeLabel,
+} from "@/lib/indent-item-display";
 
 const label = (value) =>
   String(value || "NA")
@@ -19,12 +23,6 @@ const money = (value) =>
     currency: "INR",
     maximumFractionDigits: 2,
   });
-
-const formatQuantity = (value) => {
-  const numeric = Number(value || 0);
-  if (Number.isNaN(numeric)) return value || "0";
-  return Number.isInteger(numeric) ? String(numeric) : String(numeric);
-};
 
 const summaryCardClass =
   "rounded-[20px] bg-white px-4 py-3 shadow-[0_12px_30px_-24px_rgba(0,0,0,0.35)] ring-1 ring-black/6";
@@ -369,11 +367,15 @@ export default function ProcurementCaseDetail() {
                       <div className="grid gap-px overflow-hidden rounded-[18px] border border-black/8 bg-black/8 sm:grid-cols-2 lg:min-w-[20rem]">
                         <div className="bg-white px-4 py-3">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/40">
-                            Quantity
+                            Scope
                           </p>
                           <p className="mt-1 text-sm font-medium text-[#1d1d1f]">
-                            {formatQuantity(caseItem.indent_item?.quantity)}{" "}
-                            {caseItem.indent_item?.unit || ""}
+                            {getIndentItemScopeLabel(
+                              caseItem.indent_item?.procurement_scope_type,
+                            )}
+                          </p>
+                          <p className="mt-0.5 text-xs text-black/50">
+                            {formatIndentItemPrimaryMeasure(caseItem.indent_item)}
                           </p>
                         </div>
                         <div className="bg-white px-4 py-3">

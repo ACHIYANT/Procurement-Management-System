@@ -568,6 +568,11 @@ class IndentService {
           item_name: item.item_name || "NA",
           quantity: item.quantity,
           unit: item.unit,
+          procurement_scope_type: item.procurement_scope_type,
+          contract_period_value: item.contract_period_value,
+          contract_period_unit: item.contract_period_unit,
+          contract_value_limit: item.contract_value_limit,
+          scope_remarks: item.scope_remarks,
         });
       }
     }
@@ -1049,7 +1054,16 @@ class IndentService {
     }
 
     if (!estimatedAmount || estimatedAmount <= 0) {
-      estimatedAmount = Number((asAmountNumber(targetItem.quantity) * asAmountNumber(estimatedRate)).toFixed(2));
+      if (asAmountNumber(targetItem.quantity) <= 0) {
+        estimatedAmount = estimatedRate;
+      } else {
+        estimatedAmount = Number(
+          (
+            asAmountNumber(targetItem.quantity) *
+            asAmountNumber(estimatedRate)
+          ).toFixed(2),
+        );
+      }
     }
     const administrativeApprovalStatus =
       estimatedAmount >= ADMINISTRATIVE_APPROVAL_THRESHOLD
