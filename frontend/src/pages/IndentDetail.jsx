@@ -21,6 +21,13 @@ import {
   formatCurrencyINR,
 } from "@/lib/amount-format";
 import {
+  formatIndentContractPeriod,
+  formatIndentItemPrimaryMeasure,
+  formatIndentItemScopeSummary,
+  getIndentItemScopeLabel,
+  isValueRateContractItem,
+} from "@/lib/indent-item-display";
+import {
   patchProcurement,
   postProcurement,
   procurementRequest,
@@ -41,27 +48,6 @@ const label = (value) =>
 
 const money = (value) => formatCurrencyINR(value);
 const compactMoney = (value) => formatCompactIndianAmount(value);
-const formatQuantity = (value) => {
-  const numeric = Number(value || 0);
-  if (Number.isNaN(numeric)) return value || "0";
-  return Number.isInteger(numeric) ? String(numeric) : String(numeric);
-};
-const procurementScopeLabels = {
-  standard_quantity: "Standard Purchase",
-  amc: "AMC",
-  camc: "CAMC",
-  rate_contract_quantity: "RC - Quantity",
-  rate_contract_value: "RC - Value",
-};
-const getProcurementScopeLabel = (value) =>
-  procurementScopeLabels[String(value || "standard_quantity")] ||
-  "Standard Purchase";
-const isValueRateContract = (item = {}) =>
-  item.procurement_scope_type === "rate_contract_value";
-const formatContractPeriod = (item = {}) => {
-  if (!item.contract_period_value || !item.contract_period_unit) return "NA";
-  return `${formatQuantity(item.contract_period_value)} ${label(item.contract_period_unit)}`;
-};
 const assignmentChipClass = (status) => {
   const normalized = String(status || "").toLowerCase();
   if (normalized === "unassigned") return "bg-rose-100 text-rose-700";
@@ -154,7 +140,11 @@ const workflowMetaPillClass =
 const actionPanelClass =
   "pms-workflow-action-panel rounded-[26px] border bg-white/74 p-4 shadow-[0_18px_45px_-38px_rgba(0,0,0,0.45)] backdrop-blur";
 
+const canAutoCalculateEstimate = (item = {}) =>
+  !isValueRateContractItem(item) && Number(item?.quantity || 0) > 0;
+
 const calculateEstimatedAmount = (item, estimatedRate) => {
+  if (!canAutoCalculateEstimate(item)) return "";
   const rate = Number(estimatedRate || 0);
   const quantity = Number(item?.quantity || 0);
   if (!rate || !quantity) return "";
@@ -1122,15 +1112,15 @@ export default function IndentDetail() {
                     const categoryName = item.category?.category_name || "Uncategorized";
                     const subcategoryName = item.subcategory?.subcategory_name || "NA";
                     const primaryFacts = [
-                      ["Scope", getProcurementScopeLabel(item.procurement_scope_type)],
-                      isValueRateContract(item)
+                      ["Scope", getIndentItemScopeLabel(item.procurement_scope_type)],
+                      isValueRateContractItem(item)
                         ? ["Value Limit", money(item.contract_value_limit)]
-                        : ["Quantity", `${formatQuantity(item.quantity)} ${item.unit || ""}`],
+                        : ["Quantity", formatIndentItemPrimaryMeasure(item)],
                       [
                         "Contract Period",
                         item.procurement_scope_type === "standard_quantity"
                           ? "NA"
-                          : formatContractPeriod(item),
+                          : formatIndentContractPeriod(item) || "NA",
                       ],
                       ["Estimate", compactMoney(item.estimated_amount), money(item.estimated_amount)],
                       [
@@ -1398,29 +1388,39 @@ export default function IndentDetail() {
                               <div
                                 className="mt-4 grid gap-3 md:grid-cols-2"
                               >
-                                <label className="space-y-1">
+                                {canAutoCalculateEstimate(item) ? (
+                                  <label className="space-y-1">
+                                    <span className="text-xs font-medium text-black/62">
+                                      Estimated value per unit
+                                    </span>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={estimateForm.estimated_rate}
+                                      onChange={(event) =>
+                                        setEstimateField(
+                                          itemId,
+                                          "estimated_rate",
+                                          event.target.value,
+                                          item,
+                                        )
+                                      }
+                                      className="h-11 rounded-2xl border-black/10 bg-white/90"
+                                    />
+                                  </label>
+                                ) : null}
+                                <label
+                                  className={`space-y-1 ${
+                                    canAutoCalculateEstimate(item)
+                                      ? ""
+                                      : "md:col-span-2"
+                                  }`}
+                                >
                                   <span className="text-xs font-medium text-black/62">
-                                    Estimated value per unit
-                                  </span>
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={estimateForm.estimated_rate}
-                                    onChange={(event) =>
-                                      setEstimateField(
-                                        itemId,
-                                        "estimated_rate",
-                                        event.target.value,
-                                        item,
-                                      )
-                                    }
-                                    className="h-11 rounded-2xl border-black/10 bg-white/90"
-                                  />
-                                </label>
-                                <label className="space-y-1">
-                                  <span className="text-xs font-medium text-black/62">
-                                    Estimated total value
+                                    {canAutoCalculateEstimate(item)
+                                      ? "Estimated total value"
+                                      : "Estimated total contract value"}
                                   </span>
                                   <Input
                                     type="number"
@@ -1431,9 +1431,20 @@ export default function IndentDetail() {
                                         estimateForm.estimated_rate,
                                       )
                                     }
-                                    disabled
-                                    readOnly
-                                    placeholder="Auto calculated"
+                                    disabled={canAutoCalculateEstimate(item)}
+                                    readOnly={canAutoCalculateEstimate(item)}
+                                    onChange={(event) =>
+                                      setEstimateField(
+                                        itemId,
+                                        "estimated_amount",
+                                        event.target.value,
+                                      )
+                                    }
+                                    placeholder={
+                                      canAutoCalculateEstimate(item)
+                                        ? "Auto calculated"
+                                        : "Enter total estimate"
+                                    }
                                     className="h-11 rounded-2xl border-black/10 bg-white/72"
                                   />
                                 </label>
@@ -1459,7 +1470,9 @@ export default function IndentDetail() {
                                     type="button"
                                     className="rounded-full bg-emerald-600 px-5 text-white shadow-[0_12px_24px_-18px_rgba(5,150,105,0.8)] hover:bg-emerald-700"
                                     disabled={
-                                      !estimateForm.estimated_rate ||
+                                      (canAutoCalculateEstimate(item)
+                                        ? !estimateForm.estimated_rate
+                                        : !estimateForm.estimated_amount) ||
                                       busyAction === `estimate-${itemId}`
                                     }
                                     onClick={() =>
@@ -1469,11 +1482,14 @@ export default function IndentDetail() {
                                           patchProcurement(
                                             `/indents/items/${itemId}/estimate`,
                                             {
-                                              actor_empcode: officerEmpcode,
+                                              actor_empcode:
+                                                item.procurement_officer
+                                                  ?.empcode || officerEmpcode,
                                               actor_name:
                                                 currentUser?.fullName || "",
                                               estimated_rate:
-                                                estimateForm.estimated_rate,
+                                                estimateForm.estimated_rate ||
+                                                estimateForm.estimated_amount,
                                               estimated_amount:
                                                 estimateForm.estimated_amount,
                                               remarks: estimateForm.remarks,
@@ -1625,7 +1641,7 @@ export default function IndentDetail() {
                       </p>
                       <p className="text-xs uppercase tracking-wide text-black/42">
                         {event.item_name
-                          ? `${event.item_name}${event.quantity ? ` (${formatQuantity(event.quantity)} ${event.unit || ""})` : ""}`
+                          ? `${event.item_name} (${formatIndentItemScopeSummary(event)})`
                           : "Indent level event"}
                       </p>
                     </div>

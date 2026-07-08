@@ -11,6 +11,7 @@ import {
   requestSavedRecordChange,
 } from "@/lib/approval-request-helper";
 import { getCurrentUserProfile, getCurrentUserRoles, PMS_ROLES } from "@/lib/roles";
+import { formatIndentItemScopeSummary } from "@/lib/indent-item-display";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
 import useDebounce from "@/hooks/useDebounce";
 
@@ -25,12 +26,6 @@ const money = (value) =>
     currency: "INR",
     maximumFractionDigits: 2,
   });
-
-const formatQuantity = (value) => {
-  const numeric = Number(value || 0);
-  if (Number.isNaN(numeric)) return value || "0";
-  return Number.isInteger(numeric) ? String(numeric) : String(numeric);
-};
 
 export default function IndentList() {
   const navigate = useNavigate();
@@ -298,7 +293,7 @@ export default function IndentList() {
                   Pending {group.pendingEstimateItems} | Estimated {group.estimatedItems} | Returned {group.returnedItems}
                 </p>
                 <p className="truncate text-xs text-slate-500">
-                  {group.items.map((item) => `${item.item_name} (${formatQuantity(item.quantity)} ${item.unit})`).join(", ")}
+                  {group.items.map((item) => `${item.item_name} (${formatIndentItemScopeSummary(item)})`).join(", ")}
                 </p>
               </div>
 
@@ -310,7 +305,7 @@ export default function IndentList() {
                 <div className="min-w-0">
                   <p className="truncate text-sm text-slate-700">{group.indent?.department_name || "NA"}</p>
                   <p className="truncate text-xs text-slate-500">
-                    {group.items.map((item) => `${item.item_name} (${formatQuantity(item.quantity)} ${item.unit})`).join(", ")}
+                    {group.items.map((item) => `${item.item_name} (${formatIndentItemScopeSummary(item)})`).join(", ")}
                   </p>
                 </div>
                 <p className="text-sm font-medium text-slate-800">{group.totalItems}</p>
