@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { patchProcurement, postProcurement, procurementRequest } from "@/lib/procurement-api";
 import { buildRequiredErrors, hasErrors, invalidControlClass } from "@/lib/form-validation";
 import { getCurrentUserProfile } from "@/lib/roles";
+import { formatIndentItemScopeSummary } from "@/lib/indent-item-display";
 
 const initialForm = {
   indent_id: "",
@@ -29,12 +30,6 @@ const procurementModes = [
   { value: "direct_vendor", label: "Direct Vendor" },
   { value: "open_market", label: "Open Market" },
 ];
-
-const formatQuantity = (value) => {
-  const numeric = Number(value || 0);
-  if (Number.isNaN(numeric)) return value || "0";
-  return Number.isInteger(numeric) ? String(numeric) : String(numeric);
-};
 
 function Field({ label, children, error }) {
   return (
@@ -395,7 +390,7 @@ export default function ProcurementCaseForm() {
                                   </p>
                                 </div>
                                 <div className="text-sm text-slate-600 md:text-right">
-                                  <p>{formatQuantity(item.quantity)} {item.unit}</p>
+                                  <p>{formatIndentItemScopeSummary(item)}</p>
                                   <p>{item.procurement_officer?.employee_name || "Unassigned"}</p>
                                 </div>
                               </div>
