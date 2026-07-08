@@ -39,6 +39,14 @@ const ADMINISTRATIVE_APPROVAL_STATUSES = new Set([
   "not_required",
   "auto_required",
 ]);
+const INDENT_ITEM_SCOPE_TYPES = new Set([
+  "standard_quantity",
+  "amc",
+  "camc",
+  "rate_contract_quantity",
+  "rate_contract_value",
+]);
+const CONTRACT_PERIOD_UNITS = new Set(["days", "months", "years"]);
 
 class IndentService {
   constructor() {
@@ -55,7 +63,10 @@ class IndentService {
 
   normalizeAdministrativeApprovalStatus(item = {}) {
     const estimatedAmount = asAmountNumber(
-      item?.estimated_amount ?? item?.estimated_value ?? item?.item_value,
+      item?.estimated_amount ??
+        item?.estimated_value ??
+        item?.item_value ??
+        item?.contract_value_limit,
     );
     if (estimatedAmount >= ADMINISTRATIVE_APPROVAL_THRESHOLD) {
       return "auto_required";
@@ -158,19 +169,64 @@ class IndentService {
     return "assigned";
   }
 
+  getEmployeeInitials(name = "") {
+    const parts = String(normalizeText(name) || "")
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!parts.length) return "";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`.toUpperCase();
+  }
+
+  getDesignationShort(designation = "") {
+    const normalized = normalizeText(designation);
+    if (!normalized) return "";
+    const compact = normalized.toUpperCase();
+    if (/^[A-Z0-9./&-]{2,12}$/.test(compact)) return compact;
+    const ignored = new Set(["and", "of", "the", "&"]);
+    const initials = normalized
+      .split(/\s+/)
+      .filter((word) => word && !ignored.has(word.toLowerCase()))
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase();
+    return initials || normalized.slice(0, 3).toUpperCase();
+  }
+
   resolveActorLabel({ actorEmployee = null, actorName = "", actorEmpcode = "" } = {}) {
     if (actorEmployee?.employee_name) {
-      return actorEmployee.empcode
-        ? `${actorEmployee.employee_name} (${actorEmployee.empcode})`
-        : actorEmployee.employee_name;
+      const designation = this.getDesignationShort(actorEmployee.designation);
+      const initials = this.getEmployeeInitials(actorEmployee.employee_name);
+      if (designation && initials) return `${designation}(${initials})`;
+      if (designation) return designation;
+      if (initials) return initials;
+      return actorEmployee.employee_name;
     }
 
     const normalizedName = normalizeText(actorName);
     const normalizedEmpcode = normalizeText(actorEmpcode);
-    if (normalizedName && normalizedEmpcode) return `${normalizedName} (${normalizedEmpcode})`;
-    if (normalizedName) return normalizedName;
+    if (normalizedName) return this.getEmployeeInitials(normalizedName) || normalizedName;
     if (normalizedEmpcode) return normalizedEmpcode;
     return "System";
+  }
+
+  normalizeItemScopeType(value) {
+    const normalized =
+      String(normalizeText(value) || "standard_quantity").toLowerCase();
+    return INDENT_ITEM_SCOPE_TYPES.has(normalized)
+      ? normalized
+      : "standard_quantity";
+  }
+
+  normalizeContractPeriodUnit(value) {
+    const normalized = String(normalizeText(value) || "").toLowerCase();
+    return CONTRACT_PERIOD_UNITS.has(normalized) ? normalized : null;
+  }
+
+  normalizeContractPeriodValue(value) {
+    if (value === undefined || value === null || value === "") return null;
+    const numeric = Number.parseInt(value, 10);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
   }
 
   resolveFinancialYear(dateValue) {
@@ -233,6 +289,17 @@ class IndentService {
         item_name: normalizeText(item?.item_name),
         quantity: normalizeAmount(item?.quantity) || null,
         unit: normalizeText(item?.unit),
+        procurement_scope_type: this.normalizeItemScopeType(
+          item?.procurement_scope_type,
+        ),
+        contract_period_value: this.normalizeContractPeriodValue(
+          item?.contract_period_value,
+        ),
+        contract_period_unit: this.normalizeContractPeriodUnit(
+          item?.contract_period_unit,
+        ),
+        contract_value_limit: normalizeAmount(item?.contract_value_limit) || null,
+        scope_remarks: normalizeNullableText(item?.scope_remarks),
         specification: normalizeNullableText(item?.specification),
         specific_make_required: this.normalizeYesNoBoolean(item?.specific_make_required),
         preferred_make: normalizeNullableText(item?.preferred_make),
@@ -250,6 +317,11 @@ class IndentService {
           item.item_name ||
           item.quantity !== null ||
           item.unit ||
+          item.procurement_scope_type !== "standard_quantity" ||
+          item.contract_period_value !== null ||
+          item.contract_period_unit ||
+          item.contract_value_limit !== null ||
+          item.scope_remarks ||
           item.preferred_make ||
           item.remarks,
       );
@@ -274,13 +346,37 @@ class IndentService {
         error.statusCode = 400;
         throw error;
       }
-      if (!item.quantity) {
+      const isValueRateContract =
+        item.procurement_scope_type === "rate_contract_value";
+      const needsContractPeriod = [
+        "amc",
+        "camc",
+        "rate_contract_quantity",
+        "rate_contract_value",
+      ].includes(item.procurement_scope_type);
+
+      if (!isValueRateContract && !item.quantity) {
         const error = new Error("Each indent item must have quantity.");
         error.statusCode = 400;
         throw error;
       }
-      if (!item.unit) {
+      if (!isValueRateContract && !item.unit) {
         const error = new Error("Each indent item must have unit.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (needsContractPeriod && !item.contract_period_value) {
+        const error = new Error("AMC, CAMC, and rate contract items must have a contract period.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (needsContractPeriod && !item.contract_period_unit) {
+        const error = new Error("AMC, CAMC, and rate contract items must have a contract period unit.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (isValueRateContract && !item.contract_value_limit) {
+        const error = new Error("Value-based rate contract items must have a contract value limit.");
         error.statusCode = 400;
         throw error;
       }
@@ -328,6 +424,11 @@ class IndentService {
       item_name: item.item_name || null,
       quantity: item.quantity,
       unit: item.unit || null,
+      procurement_scope_type: item.procurement_scope_type,
+      contract_period_value: item.contract_period_value,
+      contract_period_unit: item.contract_period_unit,
+      contract_value_limit: item.contract_value_limit,
+      scope_remarks: item.scope_remarks,
       specification: item.specification,
       specific_make_required: item.specific_make_required,
       estimated_rate: null,
@@ -357,6 +458,11 @@ class IndentService {
       item_name: item.item_name || null,
       quantity: item.quantity,
       unit: item.unit || null,
+      procurement_scope_type: item.procurement_scope_type,
+      contract_period_value: item.contract_period_value,
+      contract_period_unit: item.contract_period_unit,
+      contract_value_limit: item.contract_value_limit,
+      scope_remarks: item.scope_remarks,
       specification: item.specification,
       specific_make_required: item.specific_make_required,
       preferred_make: item.preferred_make,
@@ -855,8 +961,8 @@ class IndentService {
         from_procurement_officer_id: previousOfficerId,
         to_procurement_officer_id: officer.id,
         details: previousOfficerId
-          ? `${this.resolveActorLabel({ actorEmployee: actor, actorName, actorEmpcode })} reassigned this item to ${officer.employee_name} (${officer.empcode}).`
-          : `${this.resolveActorLabel({ actorEmployee: actor, actorName, actorEmpcode })} assigned this item to ${officer.employee_name} (${officer.empcode}).`,
+          ? `${this.resolveActorLabel({ actorEmployee: actor, actorName, actorEmpcode })} reassigned this item to ${this.resolveActorLabel({ actorEmployee: officer })}.`
+          : `${this.resolveActorLabel({ actorEmployee: actor, actorName, actorEmpcode })} assigned this item to ${this.resolveActorLabel({ actorEmployee: officer })}.`,
         remarks: normalizeNullableText(payload.remarks),
       });
     });
