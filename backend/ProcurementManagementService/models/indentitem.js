@@ -71,6 +71,27 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(40),
         allowNull: true,
       },
+      procurement_scope_type: {
+        type: DataTypes.STRING(40),
+        allowNull: false,
+        defaultValue: "standard_quantity",
+      },
+      contract_period_value: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      contract_period_unit: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+      },
+      contract_value_limit: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: true,
+      },
+      scope_remarks: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       specification: {
         type: DataTypes.TEXT,
         allowNull: true,

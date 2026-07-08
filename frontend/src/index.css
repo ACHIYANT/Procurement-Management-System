@@ -74,6 +74,11 @@
     max-width: 100%;
     height: auto;
   }
+
+  button,
+  [role="button"] {
+    min-width: max-content;
+  }
 }
 
 .sidebar-scroll-hidden {
