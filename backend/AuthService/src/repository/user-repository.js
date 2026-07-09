@@ -1,7 +1,7 @@
 "use strict";
 
 const { Op } = require("sequelize");
-const { User, Role, sequelize } = require("../../models");
+const { User, Role, LoginAudit, sequelize } = require("../../models");
 
 const DEFAULT_ROLE_NAME = "USER";
 
@@ -107,6 +107,71 @@ class UserRepository {
         },
       ],
     });
+  }
+
+  async createLoginAudit(payload = {}) {
+    return LoginAudit.create(payload);
+  }
+
+  async listLoginAudits(filters = {}) {
+    const where = {};
+    const userWhere = {};
+
+    if (String(filters.empcode || "").trim()) {
+      where.empcode = String(filters.empcode).trim();
+    }
+    if (String(filters.userSearch || "").trim()) {
+      const search = `%${String(filters.userSearch).trim()}%`;
+      userWhere[Op.or] = [
+        { fullname: { [Op.like]: search } },
+        { empcode: { [Op.like]: search } },
+        { mobileno: { [Op.like]: search } },
+      ];
+    }
+    if (filters.dateFrom || filters.dateTo) {
+      where.login_at = {};
+      if (filters.dateFrom) where.login_at[Op.gte] = filters.dateFrom;
+      if (filters.dateTo) where.login_at[Op.lte] = filters.dateTo;
+    }
+
+    const limit = Math.min(Math.max(Number(filters.limit || 50), 1), 200);
+    const offset = Math.max(Number(filters.offset || 0), 0);
+
+    const result = await LoginAudit.findAndCountAll({
+      where,
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: [
+            "id",
+            "empcode",
+            "fullname",
+            "mobileno",
+            "designation",
+            "department",
+          ],
+          where: Object.keys(userWhere).length ? userWhere : undefined,
+          required: Object.keys(userWhere).length > 0,
+        },
+      ],
+      order: [
+        ["login_at", "DESC"],
+        ["id", "DESC"],
+      ],
+      limit,
+      offset,
+    });
+
+    return {
+      rows: result.rows,
+      meta: {
+        total: result.count,
+        limit,
+        offset,
+        hasMore: offset + result.rows.length < result.count,
+      },
+    };
   }
 
   async findConflictingUser({ empcode, mobileno }) {

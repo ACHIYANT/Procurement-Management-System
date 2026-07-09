@@ -22,6 +22,7 @@ import EmpanelmentDetail from "./pages/EmpanelmentDetail";
 import ItemCategoryMaster from "./pages/ItemCategoryMaster";
 import ItemSpecificationTemplateMaster from "./pages/ItemSpecificationTemplateMaster";
 import GovernmentOrganizationMaster from "./pages/GovernmentOrganizationMaster";
+import LoginAuditLogs from "./pages/LoginAuditLogs";
 import TenderList from "./pages/TenderList";
 import TenderForm from "./pages/TenderForm";
 import TenderDetail from "./pages/TenderDetail";
@@ -103,6 +104,7 @@ function App() {
             <Route path="/item-categories" element={<ProtectedRoute moduleKey="itemCategories"><ItemCategoryMaster /></ProtectedRoute>} />
             <Route path="/specification-templates" element={<ProtectedRoute moduleKey="specificationTemplates"><ItemSpecificationTemplateMaster /></ProtectedRoute>} />
             <Route path="/government-organizations" element={<ProtectedRoute moduleKey="governmentOrganizations"><GovernmentOrganizationMaster /></ProtectedRoute>} />
+            <Route path="/login-audits" element={<ProtectedRoute moduleKey="loginAudits"><LoginAuditLogs /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute moduleKey="reports"><Reports /></ProtectedRoute>} />
             <Route path="/approvals" element={<ProtectedRoute moduleKey="approvals"><ApprovalCenter /></ProtectedRoute>} />
             <Route path="/approval-requests" element={<ProtectedRoute moduleKey="approvals"><ApprovalCenter requestsOnly /></ProtectedRoute>} />

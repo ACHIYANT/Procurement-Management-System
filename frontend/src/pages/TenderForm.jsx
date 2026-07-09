@@ -88,7 +88,22 @@ const tenderTypeOptions = [
 const rateContractTypeOptions = [
   { value: "quantity_based", label: "Rate Contract - Quantity Based" },
   { value: "value_based", label: "Rate Contract - Value Based" },
+  {
+    value: "quantity_value_based",
+    label: "Rate Contract - Quantity + Value Based",
+  },
+  { value: "time_only", label: "Rate Contract - Validity Only" },
+  { value: "framework", label: "Rate Contract - Framework / Multi-category" },
 ];
+
+const isTenderValueBasedRc = (form = {}) =>
+  form.tender_type === "rate_contract" &&
+  ["value_based", "quantity_value_based", "framework"].includes(
+    form.rate_contract_type,
+  );
+
+const isTenderUncappedRc = (form = {}) =>
+  form.tender_type === "rate_contract" && form.rate_contract_type === "time_only";
 
 const caseModeToTenderMode = {
   tender_gem: "gem",
@@ -307,7 +322,10 @@ export default function TenderForm() {
       if (field === "tender_type" && value !== "rate_contract") {
         next.rate_contract_type = "";
       }
-      if (field === "rate_contract_type" && value === "value_based") {
+      if (
+        field === "rate_contract_type" &&
+        ["value_based", "framework", "time_only"].includes(value)
+      ) {
         next.tender_items = (current.tender_items || []).map((item) => ({
           ...item,
           tender_quantity: "",
@@ -350,8 +368,7 @@ export default function TenderForm() {
         ...current,
         tender_items: tenderItems,
         allocation_quantity:
-          current.tender_type === "rate_contract" &&
-          current.rate_contract_type === "value_based"
+          isTenderValueBasedRc(current) || isTenderUncappedRc(current)
             ? ""
             : totalQuantity
               ? String(totalQuantity)
@@ -380,7 +397,8 @@ export default function TenderForm() {
       !(form.tender_items || []).some(
         (item) =>
           item.selected !== false &&
-          (Number(item.tender_quantity || 0) > 0 ||
+          (isTenderUncappedRc(form) ||
+            Number(item.tender_quantity || 0) > 0 ||
             Number(item.tender_value || 0) > 0),
       )
     ) {
@@ -389,8 +407,7 @@ export default function TenderForm() {
     }
     if (
       selectedCaseItems.length &&
-      form.tender_type === "rate_contract" &&
-      form.rate_contract_type === "value_based" &&
+      isTenderValueBasedRc(form) &&
       !(form.tender_items || []).some(
         (item) => item.selected !== false && Number(item.tender_value || 0) > 0,
       )
@@ -405,7 +422,12 @@ export default function TenderForm() {
       );
       if (
         tenderItem?.selected !== false &&
-        !(form.tender_type === "rate_contract" && form.rate_contract_type === "value_based") &&
+        !(
+          form.tender_type === "rate_contract" &&
+          ["value_based", "framework", "time_only"].includes(
+            form.rate_contract_type,
+          )
+        ) &&
         Number(tenderItem?.tender_quantity || 0) >
           getRemainingQuantity(caseItem)
       ) {
@@ -651,16 +673,18 @@ export default function TenderForm() {
                       Tender Items
                     </p>
                     <h2 className="mt-1 text-lg font-semibold tracking-[-0.02em] text-[#1d1d1f]">
-                      {form.tender_type === "rate_contract" &&
-                      form.rate_contract_type === "value_based"
+                      {isTenderValueBasedRc(form)
                         ? "Mention value for each item covered in this rate contract"
+                        : isTenderUncappedRc(form)
+                          ? "Select items covered by this validity-only rate contract"
                         : "Mention quantity for each item covered in this tender"}
                     </h2>
                     <p className="mt-1 text-sm leading-6 text-black/56">
                       One tender can include multiple procurement-case items.{" "}
-                      {form.tender_type === "rate_contract" &&
-                      form.rate_contract_type === "value_based"
+                      {isTenderValueBasedRc(form)
                         ? "Quantity is optional here. Enter item-wise value so the RC value is traceable per item."
+                        : isTenderUncappedRc(form)
+                          ? "No fixed quantity/value ceiling is required here. Rates will be finalized during commercial/negotiation stages."
                         : "Enter the quantity being tendered against each item."}
                     </p>
                   </div>
@@ -672,9 +696,10 @@ export default function TenderForm() {
                           <th className="px-4 py-3">Item</th>
                           <th className="px-4 py-3">Indent Qty</th>
                           <th className="px-4 py-3">
-                            {form.tender_type === "rate_contract" &&
-                            form.rate_contract_type === "value_based"
+                            {isTenderValueBasedRc(form)
                               ? "Tender Value"
+                              : isTenderUncappedRc(form)
+                                ? "Coverage"
                               : "Tender Qty"}
                           </th>
                           <th className="px-4 py-3">Remarks</th>
@@ -722,8 +747,9 @@ export default function TenderForm() {
                               </td>
                               <td className="px-4 py-3 text-black/62">
                                 <p>{formatIndentItemScopeSummary(indentItem)}</p>
-                                {indentItem.procurement_scope_type ===
-                                "rate_contract_value" ? null : (
+                                {["rate_contract_value", "rate_contract_framework", "rate_contract_time_only"].includes(
+                                  indentItem.procurement_scope_type,
+                                ) ? null : (
                                   <p className="mt-1 text-xs text-black/42">
                                     Used:{" "}
                                     {formatQuantity(alreadyTenderedQuantity)} |{" "}
@@ -735,8 +761,7 @@ export default function TenderForm() {
                                 )}
                               </td>
                               <td className="px-4 py-3">
-                                {form.tender_type === "rate_contract" &&
-                                form.rate_contract_type === "value_based" ? (
+                                {isTenderValueBasedRc(form) ? (
                                   <Input
                                     type="number"
                                     min="0"
@@ -753,6 +778,10 @@ export default function TenderForm() {
                                     className="max-w-44"
                                     placeholder="Item RC value"
                                   />
+                                ) : isTenderUncappedRc(form) ? (
+                                  <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                    Validity-only RC
+                                  </span>
                                 ) : (
                                   <Input
                                     type="number"

@@ -42,7 +42,13 @@ const TENDER_TYPES = new Set([
   "empanelment_tender",
   "amc_tender",
 ]);
-const RATE_CONTRACT_TYPES = new Set(["quantity_based", "value_based"]);
+const RATE_CONTRACT_TYPES = new Set([
+  "quantity_based",
+  "value_based",
+  "quantity_value_based",
+  "time_only",
+  "framework",
+]);
 
 const GEM_TENDER_MODES = new Set(["gem", "gem_nic_split"]);
 const NIC_TENDER_MODES = new Set(["nic", "gem_nic_split"]);
@@ -109,7 +115,11 @@ const normalizeTenderIdentifiers = (payload = {}, portalType) => {
   };
 };
 
-const normalizeTenderItems = (payloadItems = [], procurementCase = null) => {
+const normalizeTenderItems = (
+  payloadItems = [],
+  procurementCase = null,
+  { allowUncappedItems = false } = {},
+) => {
   const caseItems = Array.isArray(procurementCase?.case_items)
     ? procurementCase.case_items
     : [];
@@ -145,7 +155,9 @@ const normalizeTenderItems = (payloadItems = [], procurementCase = null) => {
     .filter(
       (item) =>
         item.procurement_case_item_id &&
-        (asAmountNumber(item.tender_quantity) > 0 || asAmountNumber(item.tender_value) > 0),
+        (allowUncappedItems ||
+          asAmountNumber(item.tender_quantity) > 0 ||
+          asAmountNumber(item.tender_value) > 0),
     );
 };
 
@@ -605,7 +617,10 @@ class TenderService {
 
     const caseMode = normalizeText(procurementCase?.procurement_mode || "");
     const isSplitCase = caseMode === "tender_split";
-    const tenderItems = normalizeTenderItems(payload.tender_items, procurementCase);
+    const tenderItems = normalizeTenderItems(payload.tender_items, procurementCase, {
+      allowUncappedItems:
+        tenderType === "rate_contract" && rateContractType === "time_only",
+    });
     const caseItems = Array.isArray(procurementCase?.case_items)
       ? procurementCase.case_items
       : [];
@@ -626,13 +641,18 @@ class TenderService {
       throw error;
     }
 
-    if (tenderType === "rate_contract" && rateContractType === "value_based") {
+    if (
+      tenderType === "rate_contract" &&
+      ["value_based", "framework", "quantity_value_based"].includes(
+        rateContractType,
+      )
+    ) {
       const missingValueItem = tenderItems.find(
         (item) => asAmountNumber(item.tender_value) <= 0,
       );
       if (missingValueItem) {
         const error = new Error(
-          `Tender value for ${missingValueItem.case_item?.indent_item?.item_name || "item"} is required for value-based rate contracts.`,
+          `Tender value for ${missingValueItem.case_item?.indent_item?.item_name || "item"} is required for this rate contract type.`,
         );
         error.statusCode = 400;
         throw error;
@@ -656,6 +676,7 @@ class TenderService {
       const remainingQuantity = Math.max(availableQuantity - alreadyTenderedQuantity, 0);
       if (
         availableQuantity > 0 &&
+        !(tenderType === "rate_contract" && ["value_based", "framework", "time_only"].includes(rateContractType)) &&
         asAmountNumber(tenderItem.tender_quantity) > remainingQuantity
       ) {
         const error = new Error(
@@ -680,7 +701,10 @@ class TenderService {
     if (
       isSplitCase &&
       !allocationQuantity &&
-      !(tenderType === "rate_contract" && rateContractType === "value_based")
+      !(
+        tenderType === "rate_contract" &&
+        ["value_based", "framework", "time_only"].includes(rateContractType)
+      )
     ) {
       const error = new Error("Split tender legs must capture quantity.");
       error.statusCode = 400;

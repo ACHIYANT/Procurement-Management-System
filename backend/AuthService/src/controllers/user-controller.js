@@ -16,9 +16,19 @@ const { extractToken } = require("../middlewares/auth-middleware");
 
 const userService = new UserService();
 
+const getClientIp = (req) =>
+  req.headers["x-forwarded-for"] ||
+  req.headers["x-real-ip"] ||
+  req.ip ||
+  req.socket?.remoteAddress ||
+  "unknown";
+
 const signIn = async (req, res) => {
   try {
-    const response = await userService.signIn(req.body?.mobileno, req.body?.password);
+    const response = await userService.signIn(req.body?.mobileno, req.body?.password, {
+      ipAddress: getClientIp(req),
+      userAgent: req.headers["user-agent"] || "",
+    });
     const csrfToken = generateCsrfToken();
     setSessionCookies(res, response.newJWT, csrfToken);
 
@@ -49,6 +59,25 @@ const signIn = async (req, res) => {
       code: "INVALID_CREDENTIALS",
       message: "Invalid credentials",
       hint: "Please check your mobile number and password and try again.",
+    });
+  }
+};
+
+const listLoginAudits = async (req, res) => {
+  try {
+    const token = extractToken(req);
+    const response = await userService.listLoginAudits(token, req.query || {});
+    return res.status(200).json(
+      buildSuccessPayload(req, res, response, {
+        message: "Login audit logs fetched successfully.",
+      }),
+    );
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 403,
+      code: "LOGIN_AUDIT_FETCH_FAILED",
+      message: "Unable to fetch login audit logs.",
+      hint: "Only admin and super admin can view login audit logs.",
     });
   }
 };
@@ -167,6 +196,7 @@ module.exports = {
   signOut,
   getCsrfToken,
   isAuthenticated,
+  listLoginAudits,
   validateActivateFromEmployee,
   executeActivateFromEmployee,
   syncEmployeeRoles,
