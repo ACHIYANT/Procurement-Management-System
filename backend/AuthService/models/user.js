@@ -21,6 +21,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "user_id",
         otherKey: "role_id",
       });
+      User.hasMany(models.LoginAudit, {
+        foreignKey: "user_id",
+        as: "login_audits",
+      });
     }
   }
 

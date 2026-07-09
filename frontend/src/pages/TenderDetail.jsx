@@ -43,6 +43,11 @@ import useDebounce from "@/hooks/useDebounce";
 
 const money = (value) => formatCurrencyINR(value);
 const compactMoney = (value) => formatCompactIndianAmount(value);
+const isTenderQuantityOptionalRc = (tender = {}) =>
+  tender?.tender_type === "rate_contract" &&
+  ["value_based", "framework", "time_only"].includes(
+    tender?.rate_contract_type,
+  );
 
 const label = (value) =>
   String(value || "NA")
@@ -2266,7 +2271,7 @@ export default function TenderDetail() {
       { name: "po_document_path", label: "PO Copy" },
     ]);
     if (
-      !(tender?.tender_type === "rate_contract" && tender?.rate_contract_type === "value_based") &&
+      !isTenderQuantityOptionalRc(tender) &&
       !String(poForm.po_quantity || "").trim()
     ) {
       validationErrors.po_quantity = "PO quantity is required.";
@@ -5162,9 +5167,8 @@ export default function TenderDetail() {
                           value={poForm.po_quantity}
                           onChange={updatePo("po_quantity")}
                           placeholder={
-                            tender?.tender_type === "rate_contract" &&
-                            tender?.rate_contract_type === "value_based"
-                              ? "Optional for value based RC"
+                            isTenderQuantityOptionalRc(tender)
+                              ? "Optional for this RC type"
                               : selectedPoVendorAllocationBasis === "quantity"
                                 ? "Auto-derived from allocated item quantity"
                                 : "Enter quantity"

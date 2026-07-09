@@ -5,6 +5,7 @@ const UserController = require("../controllers/user-controller");
 const { validateUserAuth } = require("../middlewares/auth-request-validators");
 const { authSignInRateLimiter } = require("../middlewares/security-middleware");
 const { ensureInternalService } = require("../middlewares/internal-service-middleware");
+const { ensureAuth } = require("../middlewares/auth-middleware");
 
 const router = express.Router();
 
@@ -27,5 +28,6 @@ router.post("/signin", authSignInRateLimiter, validateUserAuth, UserController.s
 router.post("/signout", UserController.signOut);
 router.get("/csrf-token", UserController.getCsrfToken);
 router.get("/is-authenticated", UserController.isAuthenticated);
+router.get("/login-audits", ensureAuth, UserController.listLoginAudits);
 
 module.exports = router;

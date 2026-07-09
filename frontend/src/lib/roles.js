@@ -135,6 +135,9 @@ export const PMS_MODULE_ACCESS = {
     create: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
     manage: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
   },
+  loginAudits: {
+    view: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
+  },
   committees: {
     view: [PMS_ROLES.PROCUREMENT_OFFICER, PMS_ROLES.APPROVER],
     create: [PMS_ROLES.PROCUREMENT_OFFICER],

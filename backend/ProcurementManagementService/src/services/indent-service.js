@@ -45,8 +45,41 @@ const INDENT_ITEM_SCOPE_TYPES = new Set([
   "camc",
   "rate_contract_quantity",
   "rate_contract_value",
+  "rate_contract_quantity_value",
+  "rate_contract_time_only",
+  "rate_contract_framework",
 ]);
 const CONTRACT_PERIOD_UNITS = new Set(["days", "months", "years"]);
+const CONTRACT_EXTENSION_TYPES = new Set([
+  "approval_based",
+  "quantity_percent",
+  "quantity_fixed",
+  "value_percent",
+  "value_fixed",
+  "time_period",
+]);
+
+const SCOPE_TYPES_REQUIRING_PERIOD = new Set([
+  "amc",
+  "camc",
+  "rate_contract_quantity",
+  "rate_contract_value",
+  "rate_contract_quantity_value",
+  "rate_contract_time_only",
+  "rate_contract_framework",
+]);
+const SCOPE_TYPES_REQUIRING_QUANTITY = new Set([
+  "standard_quantity",
+  "amc",
+  "camc",
+  "rate_contract_quantity",
+  "rate_contract_quantity_value",
+]);
+const SCOPE_TYPES_REQUIRING_VALUE = new Set([
+  "rate_contract_value",
+  "rate_contract_quantity_value",
+  "rate_contract_framework",
+]);
 
 class IndentService {
   constructor() {
@@ -229,6 +262,31 @@ class IndentService {
     return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
   }
 
+  normalizeContractExtensionType(value) {
+    const normalized = String(normalizeText(value) || "").toLowerCase();
+    return CONTRACT_EXTENSION_TYPES.has(normalized)
+      ? normalized
+      : "approval_based";
+  }
+
+  requiresQuantity(item = {}) {
+    return SCOPE_TYPES_REQUIRING_QUANTITY.has(
+      this.normalizeItemScopeType(item.procurement_scope_type),
+    );
+  }
+
+  requiresContractPeriod(item = {}) {
+    return SCOPE_TYPES_REQUIRING_PERIOD.has(
+      this.normalizeItemScopeType(item.procurement_scope_type),
+    );
+  }
+
+  requiresContractValue(item = {}) {
+    return SCOPE_TYPES_REQUIRING_VALUE.has(
+      this.normalizeItemScopeType(item.procurement_scope_type),
+    );
+  }
+
   resolveFinancialYear(dateValue) {
     const date = new Date(dateValue);
     const month = date.getMonth() + 1;
@@ -282,34 +340,52 @@ class IndentService {
 
   normalizeIndentItems(items = []) {
     return (Array.isArray(items) ? items : [])
-      .map((item) => ({
-        id: item?.id ? asId(item.id, "Indent item") : null,
-        category_id: item?.category_id ? asId(item.category_id, "Category") : null,
-        subcategory_id: item?.subcategory_id ? asId(item.subcategory_id, "Subcategory") : null,
-        item_name: normalizeText(item?.item_name),
-        quantity: normalizeAmount(item?.quantity) || null,
-        unit: normalizeText(item?.unit),
-        procurement_scope_type: this.normalizeItemScopeType(
-          item?.procurement_scope_type,
-        ),
-        contract_period_value: this.normalizeContractPeriodValue(
-          item?.contract_period_value,
-        ),
-        contract_period_unit: this.normalizeContractPeriodUnit(
-          item?.contract_period_unit,
-        ),
-        contract_value_limit: normalizeAmount(item?.contract_value_limit) || null,
-        scope_remarks: normalizeNullableText(item?.scope_remarks),
-        specification: normalizeNullableText(item?.specification),
-        specific_make_required: this.normalizeYesNoBoolean(item?.specific_make_required),
-        preferred_make: normalizeNullableText(item?.preferred_make),
-        administrative_approval_status:
-          this.normalizeAdministrativeApprovalStatus(item),
-        administrative_approval_required:
-          this.normalizeAdministrativeApprovalStatus(item) !== "not_required",
-        administrative_approval_document_path: normalizeNullableText(item?.administrative_approval_document_path),
-        remarks: normalizeNullableText(item?.remarks),
-      }))
+      .map((item) => {
+        const contractExtensionAllowed = this.normalizeYesNoBoolean(
+          item?.contract_extension_allowed,
+        );
+
+        return {
+          id: item?.id ? asId(item.id, "Indent item") : null,
+          category_id: item?.category_id ? asId(item.category_id, "Category") : null,
+          subcategory_id: item?.subcategory_id ? asId(item.subcategory_id, "Subcategory") : null,
+          item_name: normalizeText(item?.item_name),
+          quantity: normalizeAmount(item?.quantity) || null,
+          unit: normalizeText(item?.unit),
+          procurement_scope_type: this.normalizeItemScopeType(
+            item?.procurement_scope_type,
+          ),
+          contract_period_value: this.normalizeContractPeriodValue(
+            item?.contract_period_value,
+          ),
+          contract_period_unit: this.normalizeContractPeriodUnit(
+            item?.contract_period_unit,
+          ),
+          contract_value_limit: normalizeAmount(item?.contract_value_limit) || null,
+          contract_quantity_limit:
+            normalizeAmount(item?.contract_quantity_limit) || null,
+          contract_extension_allowed: contractExtensionAllowed,
+          contract_extension_type: contractExtensionAllowed
+            ? this.normalizeContractExtensionType(item?.contract_extension_type)
+            : null,
+          contract_extension_value: contractExtensionAllowed
+            ? normalizeAmount(item?.contract_extension_value) || null
+            : null,
+          contract_extension_unit: contractExtensionAllowed
+            ? this.normalizeContractPeriodUnit(item?.contract_extension_unit)
+            : null,
+          scope_remarks: normalizeNullableText(item?.scope_remarks),
+          specification: normalizeNullableText(item?.specification),
+          specific_make_required: this.normalizeYesNoBoolean(item?.specific_make_required),
+          preferred_make: normalizeNullableText(item?.preferred_make),
+          administrative_approval_status:
+            this.normalizeAdministrativeApprovalStatus(item),
+          administrative_approval_required:
+            this.normalizeAdministrativeApprovalStatus(item) !== "not_required",
+          administrative_approval_document_path: normalizeNullableText(item?.administrative_approval_document_path),
+          remarks: normalizeNullableText(item?.remarks),
+        };
+      })
       .filter(
         (item) =>
           item.category_id ||
@@ -321,6 +397,11 @@ class IndentService {
           item.contract_period_value !== null ||
           item.contract_period_unit ||
           item.contract_value_limit !== null ||
+          item.contract_quantity_limit !== null ||
+          item.contract_extension_allowed ||
+          item.contract_extension_type ||
+          item.contract_extension_value !== null ||
+          item.contract_extension_unit ||
           item.scope_remarks ||
           item.preferred_make ||
           item.remarks,
@@ -346,21 +427,16 @@ class IndentService {
         error.statusCode = 400;
         throw error;
       }
-      const isValueRateContract =
-        item.procurement_scope_type === "rate_contract_value";
-      const needsContractPeriod = [
-        "amc",
-        "camc",
-        "rate_contract_quantity",
-        "rate_contract_value",
-      ].includes(item.procurement_scope_type);
+      const needsQuantity = this.requiresQuantity(item);
+      const needsContractPeriod = this.requiresContractPeriod(item);
+      const needsContractValue = this.requiresContractValue(item);
 
-      if (!isValueRateContract && !item.quantity) {
+      if (needsQuantity && !item.quantity) {
         const error = new Error("Each indent item must have quantity.");
         error.statusCode = 400;
         throw error;
       }
-      if (!isValueRateContract && !item.unit) {
+      if (needsQuantity && !item.unit) {
         const error = new Error("Each indent item must have unit.");
         error.statusCode = 400;
         throw error;
@@ -375,8 +451,26 @@ class IndentService {
         error.statusCode = 400;
         throw error;
       }
-      if (isValueRateContract && !item.contract_value_limit) {
+      if (needsContractValue && !item.contract_value_limit) {
         const error = new Error("Value-based rate contract items must have a contract value limit.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (
+        item.procurement_scope_type === "rate_contract_quantity_value" &&
+        !item.contract_quantity_limit &&
+        !item.quantity
+      ) {
+        const error = new Error("Quantity + value rate contracts must have a quantity limit or item quantity.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (
+        item.contract_extension_allowed &&
+        item.contract_extension_type === "time_period" &&
+        (!item.contract_extension_value || !item.contract_extension_unit)
+      ) {
+        const error = new Error("Time-based RC extension must have extension period and unit.");
         error.statusCode = 400;
         throw error;
       }
@@ -428,6 +522,11 @@ class IndentService {
       contract_period_value: item.contract_period_value,
       contract_period_unit: item.contract_period_unit,
       contract_value_limit: item.contract_value_limit,
+      contract_quantity_limit: item.contract_quantity_limit,
+      contract_extension_allowed: item.contract_extension_allowed,
+      contract_extension_type: item.contract_extension_type,
+      contract_extension_value: item.contract_extension_value,
+      contract_extension_unit: item.contract_extension_unit,
       scope_remarks: item.scope_remarks,
       specification: item.specification,
       specific_make_required: item.specific_make_required,
@@ -462,6 +561,11 @@ class IndentService {
       contract_period_value: item.contract_period_value,
       contract_period_unit: item.contract_period_unit,
       contract_value_limit: item.contract_value_limit,
+      contract_quantity_limit: item.contract_quantity_limit,
+      contract_extension_allowed: item.contract_extension_allowed,
+      contract_extension_type: item.contract_extension_type,
+      contract_extension_value: item.contract_extension_value,
+      contract_extension_unit: item.contract_extension_unit,
       scope_remarks: item.scope_remarks,
       specification: item.specification,
       specific_make_required: item.specific_make_required,
@@ -572,6 +676,11 @@ class IndentService {
           contract_period_value: item.contract_period_value,
           contract_period_unit: item.contract_period_unit,
           contract_value_limit: item.contract_value_limit,
+          contract_quantity_limit: item.contract_quantity_limit,
+          contract_extension_allowed: item.contract_extension_allowed,
+          contract_extension_type: item.contract_extension_type,
+          contract_extension_value: item.contract_extension_value,
+          contract_extension_unit: item.contract_extension_unit,
           scope_remarks: item.scope_remarks,
         });
       }

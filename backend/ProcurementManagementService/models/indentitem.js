@@ -88,6 +88,27 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DECIMAL(18, 2),
         allowNull: true,
       },
+      contract_quantity_limit: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+      },
+      contract_extension_allowed: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      contract_extension_type: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+      },
+      contract_extension_value: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+      },
+      contract_extension_unit: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+      },
       scope_remarks: {
         type: DataTypes.TEXT,
         allowNull: true,
