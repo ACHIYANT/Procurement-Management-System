@@ -22,6 +22,7 @@ import {
 } from "@/lib/amount-format";
 import {
   formatIndentContractPeriod,
+  formatIndentContractExtension,
   formatIndentItemPrimaryMeasure,
   formatIndentItemScopeSummary,
   getIndentItemScopeLabel,
@@ -1113,9 +1114,12 @@ export default function IndentDetail() {
                     const subcategoryName = item.subcategory?.subcategory_name || "NA";
                     const primaryFacts = [
                       ["Scope", getIndentItemScopeLabel(item.procurement_scope_type)],
-                      isValueRateContractItem(item)
-                        ? ["Value Limit", money(item.contract_value_limit)]
-                        : ["Quantity", formatIndentItemPrimaryMeasure(item)],
+                      [
+                        isValueRateContractItem(item)
+                          ? "Value Limit"
+                          : "Measure",
+                        formatIndentItemPrimaryMeasure(item),
+                      ],
                       [
                         "Contract Period",
                         item.procurement_scope_type === "standard_quantity"
@@ -1139,6 +1143,9 @@ export default function IndentDetail() {
                       ["Specific make", item.specific_make_required ? "Yes" : "No"],
                       ...(item.scope_remarks
                         ? [["Scope note", item.scope_remarks]]
+                        : []),
+                      ...(item.contract_extension_allowed
+                        ? [["Extension", formatIndentContractExtension(item)]]
                         : []),
                       [
                         "Assigned",

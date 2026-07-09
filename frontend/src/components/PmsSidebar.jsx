@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   Gavel,
   Home,
+  History,
   LogOut,
   Menu,
   Network,
@@ -169,6 +170,12 @@ const navigationGroups = [
         label: "Organizations",
         path: "/government-organizations",
         icon: Network,
+        roles: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
+      },
+      {
+        label: "Login Audits",
+        path: "/login-audits",
+        icon: History,
         roles: [PMS_ROLES.ADMIN, PMS_ROLES.SUPER_ADMIN],
       },
       {

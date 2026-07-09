@@ -40,7 +40,10 @@ import {
 } from "@/lib/form-validation";
 import InfoTooltip from "../components/InfoTooltip";
 import { getCurrentUserProfile } from "@/lib/roles";
-import { formatIndentItemScopeSummary } from "@/lib/indent-item-display";
+import {
+  formatIndentItemScopeSummary,
+  requiresIndentQuantity,
+} from "@/lib/indent-item-display";
 
 const UNIT_OPTIONS = [
   "Nos",
@@ -85,6 +88,21 @@ const PROCUREMENT_SCOPE_OPTIONS = [
     label: "Rate Contract - value based",
     helper: "Example: Computer RC up to Rs. 150 Cr for 9 months.",
   },
+  {
+    value: "rate_contract_quantity_value",
+    label: "Rate Contract - quantity + value based",
+    helper: "Example: scanners up to 2000 units and Rs. 5 Cr for 1 year.",
+  },
+  {
+    value: "rate_contract_time_only",
+    label: "Rate Contract - validity only",
+    helper: "Example: printer RC for 1 year with no fixed quantity or value ceiling.",
+  },
+  {
+    value: "rate_contract_framework",
+    label: "Rate Contract - framework / multi-category",
+    helper: "Example: computer RC with many configurations and optional add-on rates.",
+  },
 ];
 
 const CONTRACT_PERIOD_UNITS = [
@@ -94,13 +112,24 @@ const CONTRACT_PERIOD_UNITS = [
 ];
 const ADMINISTRATIVE_APPROVAL_THRESHOLD = 10000000;
 
-const isValueBasedRateContract = (item = {}) =>
-  item.procurement_scope_type === "rate_contract_value";
-
-const requiresContractPeriod = (item = {}) =>
-  ["amc", "camc", "rate_contract_quantity", "rate_contract_value"].includes(
+const isValueCappedRateContract = (item = {}) =>
+  ["rate_contract_value", "rate_contract_quantity_value", "rate_contract_framework"].includes(
     item.procurement_scope_type,
   );
+
+const isQuantityValueRateContract = (item = {}) =>
+  item.procurement_scope_type === "rate_contract_quantity_value";
+
+const requiresContractPeriod = (item = {}) =>
+  [
+    "amc",
+    "camc",
+    "rate_contract_quantity",
+    "rate_contract_value",
+    "rate_contract_quantity_value",
+    "rate_contract_time_only",
+    "rate_contract_framework",
+  ].includes(item.procurement_scope_type);
 const shouldAutoRequireAdministrativeApproval = (item = {}) =>
   Number(item.contract_value_limit || 0) >= ADMINISTRATIVE_APPROVAL_THRESHOLD;
 
@@ -114,6 +143,11 @@ const createBlankItem = () => ({
   contract_period_value: "",
   contract_period_unit: "months",
   contract_value_limit: "",
+  contract_quantity_limit: "",
+  contract_extension_allowed: "no",
+  contract_extension_type: "approval_based",
+  contract_extension_value: "",
+  contract_extension_unit: "months",
   scope_remarks: "",
   specification: "",
   specific_make_required: "no",
@@ -171,6 +205,14 @@ const mapIndentToForm = (indent = {}) => ({
         contract_period_value: toQuantityInput(item.contract_period_value),
         contract_period_unit: item.contract_period_unit || "months",
         contract_value_limit: toQuantityInput(item.contract_value_limit),
+        contract_quantity_limit: toQuantityInput(item.contract_quantity_limit),
+        contract_extension_allowed: item.contract_extension_allowed
+          ? "yes"
+          : "no",
+        contract_extension_type:
+          item.contract_extension_type || "approval_based",
+        contract_extension_value: toQuantityInput(item.contract_extension_value),
+        contract_extension_unit: item.contract_extension_unit || "months",
         scope_remarks: item.scope_remarks || "",
         specification: item.specification || "",
         specific_make_required: item.specific_make_required ? "yes" : "no",
@@ -586,6 +628,32 @@ export default function IndentForm() {
         if (field === "specific_make_required" && value === "no") {
           nextItem.preferred_make = "";
         }
+        if (field === "procurement_scope_type") {
+          if (!requiresIndentQuantity(nextItem)) {
+            nextItem.quantity = "";
+            nextItem.unit = "";
+          }
+          if (!isValueCappedRateContract(nextItem)) {
+            nextItem.contract_value_limit = "";
+          }
+          if (!isQuantityValueRateContract(nextItem)) {
+            nextItem.contract_quantity_limit = "";
+          }
+          if (!requiresContractPeriod(nextItem)) {
+            nextItem.contract_period_value = "";
+            nextItem.contract_period_unit = "months";
+            nextItem.contract_extension_allowed = "no";
+            nextItem.contract_extension_type = "approval_based";
+            nextItem.contract_extension_value = "";
+            nextItem.contract_extension_unit = "months";
+            nextItem.scope_remarks = "";
+          }
+        }
+        if (field === "contract_extension_allowed" && value !== "yes") {
+          nextItem.contract_extension_type = "approval_based";
+          nextItem.contract_extension_value = "";
+          nextItem.contract_extension_unit = "months";
+        }
         if (
           field === "contract_value_limit" ||
           field === "procurement_scope_type"
@@ -745,7 +813,7 @@ export default function IndentForm() {
         { name: "category_id", label: "Category" },
         { name: "subcategory_id", label: "Sub category" },
       ]);
-      if (!isValueBasedRateContract(item)) {
+      if (requiresIndentQuantity(item)) {
         Object.assign(
           nextErrors,
           buildRequiredErrors(item, [
@@ -763,11 +831,29 @@ export default function IndentForm() {
           ]),
         );
       }
-      if (isValueBasedRateContract(item)) {
+      if (isValueCappedRateContract(item)) {
         Object.assign(
           nextErrors,
           buildRequiredErrors(item, [
             { name: "contract_value_limit", label: "Contract value limit" },
+          ]),
+        );
+      }
+      if (
+        isQuantityValueRateContract(item) &&
+        !String(item.contract_quantity_limit || item.quantity || "").trim()
+      ) {
+        nextErrors.contract_quantity_limit = "Quantity limit is required.";
+      }
+      if (
+        item.contract_extension_allowed === "yes" &&
+        item.contract_extension_type === "time_period"
+      ) {
+        Object.assign(
+          nextErrors,
+          buildRequiredErrors(item, [
+            { name: "contract_extension_value", label: "Extension period" },
+            { name: "contract_extension_unit", label: "Extension period unit" },
           ]),
         );
       }
@@ -810,6 +896,11 @@ export default function IndentForm() {
         item.contract_period_value,
         item.contract_period_unit,
         item.contract_value_limit,
+        item.contract_quantity_limit,
+        item.contract_extension_allowed === "yes" ? "extension" : "",
+        item.contract_extension_type,
+        item.contract_extension_value,
+        item.contract_extension_unit,
         item.scope_remarks,
         item.specification,
         item.preferred_make,
@@ -830,17 +921,35 @@ export default function IndentForm() {
     cfms_no: sourceForm.cfms_no || null,
     items: sourceForm.items.map((item) => ({
       ...item,
-      quantity: isValueBasedRateContract(item) ? "" : item.quantity,
-      unit: isValueBasedRateContract(item) ? "" : item.unit,
+      quantity: requiresIndentQuantity(item) ? item.quantity : "",
+      unit: requiresIndentQuantity(item) ? item.unit : "",
       contract_period_value: requiresContractPeriod(item)
         ? item.contract_period_value
         : "",
       contract_period_unit: requiresContractPeriod(item)
         ? item.contract_period_unit || "months"
         : "",
-      contract_value_limit: isValueBasedRateContract(item)
+      contract_value_limit: isValueCappedRateContract(item)
         ? item.contract_value_limit
         : "",
+      contract_quantity_limit: isQuantityValueRateContract(item)
+        ? item.contract_quantity_limit || item.quantity
+        : "",
+      contract_extension_allowed: requiresContractPeriod(item)
+        ? item.contract_extension_allowed === "yes"
+        : false,
+      contract_extension_type:
+        requiresContractPeriod(item) && item.contract_extension_allowed === "yes"
+          ? item.contract_extension_type || "approval_based"
+          : "",
+      contract_extension_value:
+        requiresContractPeriod(item) && item.contract_extension_allowed === "yes"
+          ? item.contract_extension_value
+          : "",
+      contract_extension_unit:
+        requiresContractPeriod(item) && item.contract_extension_allowed === "yes"
+          ? item.contract_extension_unit || "months"
+          : "",
       scope_remarks: requiresContractPeriod(item) ? item.scope_remarks : "",
       administrative_approval_required: requiresAdministrativeApproval(item),
     })),
@@ -1341,10 +1450,10 @@ export default function IndentForm() {
                             step="1"
                             value={item.quantity}
                             onChange={updateItem(index, "quantity")}
-                            disabled={isValueBasedRateContract(item)}
+                            disabled={!requiresIndentQuantity(item)}
                             placeholder={
-                              isValueBasedRateContract(item)
-                                ? "Not required for value RC"
+                              !requiresIndentQuantity(item)
+                                ? "Not required for this scope"
                                 : ""
                             }
                             className={invalidControlClass(
@@ -1356,7 +1465,7 @@ export default function IndentForm() {
                           <select
                             value={item.unit}
                             onChange={updateItem(index, "unit")}
-                            disabled={isValueBasedRateContract(item)}
+                            disabled={!requiresIndentQuantity(item)}
                             className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
                               errors.items?.[index]?.unit,
                             )}`}
@@ -1412,7 +1521,25 @@ export default function IndentForm() {
                             </Field>
                           </>
                         ) : null}
-                        {isValueBasedRateContract(item) ? (
+                        {isQuantityValueRateContract(item) ? (
+                          <Field
+                            label="Contract Quantity Limit"
+                            error={errors.items?.[index]?.contract_quantity_limit}
+                          >
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.contract_quantity_limit}
+                              onChange={updateItem(index, "contract_quantity_limit")}
+                              placeholder="Optional if same as item quantity"
+                              className={invalidControlClass(
+                                errors.items?.[index]?.contract_quantity_limit,
+                              )}
+                            />
+                          </Field>
+                        ) : null}
+                        {isValueCappedRateContract(item) ? (
                           <Field
                             label="Contract Value Limit"
                             error={errors.items?.[index]?.contract_value_limit}
@@ -1429,6 +1556,120 @@ export default function IndentForm() {
                               )}
                             />
                           </Field>
+                        ) : null}
+                        {requiresContractPeriod(item) ? (
+                          <>
+                            <Field label="Extension Allowed?">
+                              <select
+                                value={item.contract_extension_allowed || "no"}
+                                onChange={updateItem(
+                                  index,
+                                  "contract_extension_allowed",
+                                )}
+                                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                              >
+                                <option value="no">No</option>
+                                <option value="yes">Yes</option>
+                              </select>
+                            </Field>
+                            {item.contract_extension_allowed === "yes" ? (
+                              <>
+                                <Field label="Extension Type">
+                                  <select
+                                    value={
+                                      item.contract_extension_type ||
+                                      "approval_based"
+                                    }
+                                    onChange={updateItem(
+                                      index,
+                                      "contract_extension_type",
+                                    )}
+                                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                                  >
+                                    <option value="approval_based">
+                                      As per approval
+                                    </option>
+                                    <option value="quantity_percent">
+                                      Quantity percentage
+                                    </option>
+                                    <option value="quantity_fixed">
+                                      Fixed quantity
+                                    </option>
+                                    <option value="value_percent">
+                                      Value percentage
+                                    </option>
+                                    <option value="value_fixed">
+                                      Fixed value
+                                    </option>
+                                    <option value="time_period">
+                                      Time period
+                                    </option>
+                                  </select>
+                                </Field>
+                                <Field
+                                  label={
+                                    item.contract_extension_type ===
+                                    "time_period"
+                                      ? "Extension Period"
+                                      : "Extension Limit"
+                                  }
+                                  error={
+                                    errors.items?.[index]
+                                      ?.contract_extension_value
+                                  }
+                                >
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={item.contract_extension_value}
+                                    onChange={updateItem(
+                                      index,
+                                      "contract_extension_value",
+                                    )}
+                                    placeholder="Example: 25"
+                                    className={invalidControlClass(
+                                      errors.items?.[index]
+                                        ?.contract_extension_value,
+                                    )}
+                                  />
+                                </Field>
+                                {item.contract_extension_type ===
+                                "time_period" ? (
+                                  <Field
+                                    label="Extension Unit"
+                                    error={
+                                      errors.items?.[index]
+                                        ?.contract_extension_unit
+                                    }
+                                  >
+                                    <select
+                                      value={
+                                        item.contract_extension_unit || "months"
+                                      }
+                                      onChange={updateItem(
+                                        index,
+                                        "contract_extension_unit",
+                                      )}
+                                      className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
+                                        errors.items?.[index]
+                                          ?.contract_extension_unit,
+                                      )}`}
+                                    >
+                                      {CONTRACT_PERIOD_UNITS.map((unit) => (
+                                        <option
+                                          key={unit.value}
+                                          value={unit.value}
+                                        >
+                                          {unit.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </Field>
+                                ) : null}
+                              </>
+                            ) : null}
+                          </>
                         ) : null}
                         <Field label="Specific Make Required?">
                           <select
