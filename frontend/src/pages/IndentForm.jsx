@@ -1224,8 +1224,8 @@ export default function IndentForm() {
               {isApprovedSavedEdit
                 ? "An approved update request is linked with this indent. Submit the corrected record to close the request."
                 : isEditMode
-                  ? "Continue a saved draft. Submit only when the inward letter, mandatory dates, upload, and item lines are complete."
-                  : "Record the inward indent letter and its item lines. Save as draft if details are still being collected."}
+                  ? "Continue a saved draft. PMS indent number will be generated only when you final submit it."
+                  : "Record the inward indent letter and its item lines. Save as draft if details are still being collected; PMS indent number is generated only on final submit."}
             </p>
             </div>
           </div>
