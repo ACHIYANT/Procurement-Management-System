@@ -340,15 +340,10 @@ class IndentService {
     };
   }
 
-  async generateSystemIndentNo({ receivedDate }, transaction) {
+  generateSystemIndentNo({ receivedDate, indentId }) {
+    const id = asId(indentId, "Indent id");
     const financialYear = this.resolveFinancialYear(receivedDate);
-    const sequence =
-      (await this.repository.countIndentsInFinancialYear(
-        financialYear.startDate,
-        financialYear.endDate,
-        { transaction },
-      )) + 1;
-    return `PMS/${financialYear.label}/${String(sequence).padStart(4, "0")}`;
+    return `PMS/${financialYear.label}/${String(id).padStart(4, "0")}`;
   }
 
   async logItemEvent(
@@ -914,15 +909,9 @@ class IndentService {
       : null;
 
     const indent = await this.repository.withTransaction(async (transaction) => {
-      const systemIndentNo = draft
-        ? null
-        : await this.generateSystemIndentNo(
-            { receivedDate: indentPayload.received_date },
-            transaction,
-          );
       const createdIndent = await this.repository.createIndent(
         {
-          system_indent_no: systemIndentNo,
+          system_indent_no: null,
           ...indentPayload,
           status: draft ? "draft" : "received",
           created_by: creator?.id || null,
@@ -930,6 +919,19 @@ class IndentService {
         },
         { transaction },
       );
+
+      if (!draft) {
+        await this.repository.updateIndent(
+          createdIndent,
+          {
+            system_indent_no: this.generateSystemIndentNo({
+              receivedDate: indentPayload.received_date,
+              indentId: createdIndent.id,
+            }),
+          },
+          { transaction },
+        );
+      }
 
       const createdItems = items.length
         ? await this.repository.bulkCreateItems(
@@ -989,10 +991,10 @@ class IndentService {
       const systemIndentNo = draft
         ? indent.system_indent_no || null
         : indent.system_indent_no ||
-          (await this.generateSystemIndentNo(
-            { receivedDate: indentPayload.received_date },
-            transaction,
-          ));
+          this.generateSystemIndentNo({
+            receivedDate: indentPayload.received_date,
+            indentId: indent.id,
+          });
 
       const nextStatus = isDraftIndent
         ? draft
