@@ -100,9 +100,32 @@ const PROCUREMENT_SCOPE_OPTIONS = [
   },
   {
     value: "rate_contract_framework",
-    label: "Rate Contract - framework / multi-category",
-    helper: "Example: computer RC with many configurations and optional add-on rates.",
+    label: "Rate Contract - package / multi-category",
+    helper: "Example: one desktop RC package with common Rs. 150 Cr pool and optional category/accessory caps.",
   },
+];
+
+const RC_PACKAGE_LIMIT_OPTIONS = [
+  { value: "no_fixed_cap", label: "No fixed quantity/value cap" },
+  { value: "value", label: "Common value limit" },
+  { value: "quantity", label: "Common quantity limit" },
+  { value: "quantity_value", label: "Common quantity + value limit" },
+  { value: "validity_only", label: "Validity only" },
+];
+
+const RC_LINE_ROLE_OPTIONS = [
+  { value: "main_category", label: "Main category" },
+  { value: "accessory", label: "Accessory / add-on" },
+  { value: "service", label: "Service" },
+  { value: "optional_add_on", label: "Optional add-on" },
+];
+
+const RC_LINE_CAP_OPTIONS = [
+  { value: "no_separate_cap", label: "No separate cap - use common pool" },
+  { value: "rate_only", label: "Rate only" },
+  { value: "quantity", label: "Quantity cap" },
+  { value: "value", label: "Value cap" },
+  { value: "quantity_value", label: "Quantity + value cap" },
 ];
 
 const CONTRACT_PERIOD_UNITS = [
@@ -113,12 +136,31 @@ const CONTRACT_PERIOD_UNITS = [
 const ADMINISTRATIVE_APPROVAL_THRESHOLD = 10000000;
 
 const isValueCappedRateContract = (item = {}) =>
-  ["rate_contract_value", "rate_contract_quantity_value", "rate_contract_framework"].includes(
+  ["rate_contract_value", "rate_contract_quantity_value"].includes(
     item.procurement_scope_type,
   );
 
 const isQuantityValueRateContract = (item = {}) =>
   item.procurement_scope_type === "rate_contract_quantity_value";
+
+const isFrameworkRateContract = (item = {}) =>
+  item.procurement_scope_type === "rate_contract_framework";
+
+const packageNeedsValue = (item = {}) =>
+  isFrameworkRateContract(item) &&
+  ["value", "quantity_value"].includes(item.rc_package_limit_type);
+
+const packageNeedsQuantity = (item = {}) =>
+  isFrameworkRateContract(item) &&
+  ["quantity", "quantity_value"].includes(item.rc_package_limit_type);
+
+const lineNeedsValue = (item = {}) =>
+  isFrameworkRateContract(item) &&
+  ["value", "quantity_value"].includes(item.rc_line_cap_type);
+
+const lineNeedsQuantity = (item = {}) =>
+  isFrameworkRateContract(item) &&
+  ["quantity", "quantity_value"].includes(item.rc_line_cap_type);
 
 const requiresContractPeriod = (item = {}) =>
   [
@@ -131,7 +173,11 @@ const requiresContractPeriod = (item = {}) =>
     "rate_contract_framework",
   ].includes(item.procurement_scope_type);
 const shouldAutoRequireAdministrativeApproval = (item = {}) =>
-  Number(item.contract_value_limit || 0) >= ADMINISTRATIVE_APPROVAL_THRESHOLD;
+  Math.max(
+    Number(item.contract_value_limit || 0),
+    Number(item.rc_package_value_limit || 0),
+    Number(item.rc_line_value_limit || 0),
+  ) >= ADMINISTRATIVE_APPROVAL_THRESHOLD;
 
 const createBlankItem = () => ({
   category_id: "",
@@ -148,6 +194,14 @@ const createBlankItem = () => ({
   contract_extension_type: "approval_based",
   contract_extension_value: "",
   contract_extension_unit: "months",
+  rc_package_name: "",
+  rc_package_limit_type: "no_fixed_cap",
+  rc_package_value_limit: "",
+  rc_package_quantity_limit: "",
+  rc_line_role: "main_category",
+  rc_line_cap_type: "no_separate_cap",
+  rc_line_value_limit: "",
+  rc_line_quantity_limit: "",
   scope_remarks: "",
   specification: "",
   specific_make_required: "no",
@@ -213,6 +267,15 @@ const mapIndentToForm = (indent = {}) => ({
           item.contract_extension_type || "approval_based",
         contract_extension_value: toQuantityInput(item.contract_extension_value),
         contract_extension_unit: item.contract_extension_unit || "months",
+        rc_package_name: item.rc_package_name || "",
+        rc_package_limit_type:
+          item.rc_package_limit_type || "no_fixed_cap",
+        rc_package_value_limit: toQuantityInput(item.rc_package_value_limit),
+        rc_package_quantity_limit: toQuantityInput(item.rc_package_quantity_limit),
+        rc_line_role: item.rc_line_role || "main_category",
+        rc_line_cap_type: item.rc_line_cap_type || "no_separate_cap",
+        rc_line_value_limit: toQuantityInput(item.rc_line_value_limit),
+        rc_line_quantity_limit: toQuantityInput(item.rc_line_quantity_limit),
         scope_remarks: item.scope_remarks || "",
         specification: item.specification || "",
         specific_make_required: item.specific_make_required ? "yes" : "no",
@@ -431,6 +494,17 @@ export default function IndentForm() {
     getHaryanaGovernmentMasterTree(),
   );
   const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const rcPackageNames = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          form.items
+            .map((item) => String(item.rc_package_name || "").trim())
+            .filter(Boolean),
+        ),
+      ),
+    [form.items],
+  );
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -628,6 +702,26 @@ export default function IndentForm() {
         if (field === "specific_make_required" && value === "no") {
           nextItem.preferred_make = "";
         }
+        if (field === "rc_package_name") {
+          const matchingPackage = current.items.find(
+            (entry, entryIndex) =>
+              entryIndex !== index &&
+              String(entry.rc_package_name || "").trim().toLowerCase() ===
+                String(value || "").trim().toLowerCase(),
+          );
+          if (matchingPackage) {
+            nextItem.rc_package_limit_type =
+              matchingPackage.rc_package_limit_type || "no_fixed_cap";
+            nextItem.rc_package_value_limit =
+              matchingPackage.rc_package_value_limit || "";
+            nextItem.rc_package_quantity_limit =
+              matchingPackage.rc_package_quantity_limit || "";
+            nextItem.contract_period_value =
+              matchingPackage.contract_period_value || nextItem.contract_period_value;
+            nextItem.contract_period_unit =
+              matchingPackage.contract_period_unit || nextItem.contract_period_unit;
+          }
+        }
         if (field === "procurement_scope_type") {
           if (!requiresIndentQuantity(nextItem)) {
             nextItem.quantity = "";
@@ -642,20 +736,39 @@ export default function IndentForm() {
           if (!requiresContractPeriod(nextItem)) {
             nextItem.contract_period_value = "";
             nextItem.contract_period_unit = "months";
-            nextItem.contract_extension_allowed = "no";
-            nextItem.contract_extension_type = "approval_based";
-            nextItem.contract_extension_value = "";
-            nextItem.contract_extension_unit = "months";
             nextItem.scope_remarks = "";
           }
+          if (!isFrameworkRateContract(nextItem)) {
+            nextItem.rc_package_name = "";
+            nextItem.rc_package_limit_type = "no_fixed_cap";
+            nextItem.rc_package_value_limit = "";
+            nextItem.rc_package_quantity_limit = "";
+            nextItem.rc_line_role = "main_category";
+            nextItem.rc_line_cap_type = "no_separate_cap";
+            nextItem.rc_line_value_limit = "";
+            nextItem.rc_line_quantity_limit = "";
+          }
         }
-        if (field === "contract_extension_allowed" && value !== "yes") {
-          nextItem.contract_extension_type = "approval_based";
-          nextItem.contract_extension_value = "";
-          nextItem.contract_extension_unit = "months";
+        if (field === "rc_package_limit_type") {
+          if (!["value", "quantity_value"].includes(value)) {
+            nextItem.rc_package_value_limit = "";
+          }
+          if (!["quantity", "quantity_value"].includes(value)) {
+            nextItem.rc_package_quantity_limit = "";
+          }
+        }
+        if (field === "rc_line_cap_type") {
+          if (!["value", "quantity_value"].includes(value)) {
+            nextItem.rc_line_value_limit = "";
+          }
+          if (!["quantity", "quantity_value"].includes(value)) {
+            nextItem.rc_line_quantity_limit = "";
+          }
         }
         if (
           field === "contract_value_limit" ||
+          field === "rc_package_value_limit" ||
+          field === "rc_line_value_limit" ||
           field === "procurement_scope_type"
         ) {
           nextItem.administrative_approval_status =
@@ -845,17 +958,36 @@ export default function IndentForm() {
       ) {
         nextErrors.contract_quantity_limit = "Quantity limit is required.";
       }
-      if (
-        item.contract_extension_allowed === "yes" &&
-        item.contract_extension_type === "time_period"
-      ) {
+      if (isFrameworkRateContract(item)) {
         Object.assign(
           nextErrors,
           buildRequiredErrors(item, [
-            { name: "contract_extension_value", label: "Extension period" },
-            { name: "contract_extension_unit", label: "Extension period unit" },
+            { name: "rc_package_name", label: "RC package name" },
+            { name: "rc_package_limit_type", label: "RC package limit type" },
+            { name: "rc_line_role", label: "RC line role" },
+            { name: "rc_line_cap_type", label: "RC line cap type" },
           ]),
         );
+        if (packageNeedsValue(item)) {
+          if (!item.rc_package_value_limit) {
+            nextErrors.rc_package_value_limit = "Common package value limit is required.";
+          }
+        }
+        if (packageNeedsQuantity(item)) {
+          if (!item.rc_package_quantity_limit) {
+            nextErrors.rc_package_quantity_limit = "Common package quantity limit is required.";
+          }
+        }
+        if (lineNeedsValue(item)) {
+          if (!item.rc_line_value_limit) {
+            nextErrors.rc_line_value_limit = "Line value cap is required.";
+          }
+        }
+        if (lineNeedsQuantity(item)) {
+          if (!item.rc_line_quantity_limit) {
+            nextErrors.rc_line_quantity_limit = "Line quantity cap is required.";
+          }
+        }
       }
       if (item.specific_make_required === "yes" && !String(item.preferred_make || "").trim()) {
         nextErrors.preferred_make = "Specific make / company is required.";
@@ -901,6 +1033,14 @@ export default function IndentForm() {
         item.contract_extension_type,
         item.contract_extension_value,
         item.contract_extension_unit,
+        item.rc_package_name,
+        item.rc_package_limit_type,
+        item.rc_package_value_limit,
+        item.rc_package_quantity_limit,
+        item.rc_line_role,
+        item.rc_line_cap_type,
+        item.rc_line_value_limit,
+        item.rc_line_quantity_limit,
         item.scope_remarks,
         item.specification,
         item.preferred_make,
@@ -935,21 +1075,30 @@ export default function IndentForm() {
       contract_quantity_limit: isQuantityValueRateContract(item)
         ? item.contract_quantity_limit || item.quantity
         : "",
-      contract_extension_allowed: requiresContractPeriod(item)
-        ? item.contract_extension_allowed === "yes"
-        : false,
-      contract_extension_type:
-        requiresContractPeriod(item) && item.contract_extension_allowed === "yes"
-          ? item.contract_extension_type || "approval_based"
-          : "",
-      contract_extension_value:
-        requiresContractPeriod(item) && item.contract_extension_allowed === "yes"
-          ? item.contract_extension_value
-          : "",
-      contract_extension_unit:
-        requiresContractPeriod(item) && item.contract_extension_allowed === "yes"
-          ? item.contract_extension_unit || "months"
-          : "",
+      contract_extension_allowed: false,
+      contract_extension_type: "",
+      contract_extension_value: "",
+      contract_extension_unit: "",
+      rc_package_name: isFrameworkRateContract(item) ? item.rc_package_name : "",
+      rc_package_limit_type: isFrameworkRateContract(item)
+        ? item.rc_package_limit_type || "no_fixed_cap"
+        : "",
+      rc_package_value_limit: packageNeedsValue(item)
+        ? item.rc_package_value_limit
+        : "",
+      rc_package_quantity_limit: packageNeedsQuantity(item)
+        ? item.rc_package_quantity_limit
+        : "",
+      rc_line_role: isFrameworkRateContract(item)
+        ? item.rc_line_role || "main_category"
+        : "",
+      rc_line_cap_type: isFrameworkRateContract(item)
+        ? item.rc_line_cap_type || "no_separate_cap"
+        : "",
+      rc_line_value_limit: lineNeedsValue(item) ? item.rc_line_value_limit : "",
+      rc_line_quantity_limit: lineNeedsQuantity(item)
+        ? item.rc_line_quantity_limit
+        : "",
       scope_remarks: requiresContractPeriod(item) ? item.scope_remarks : "",
       administrative_approval_required: requiresAdministrativeApproval(item),
     })),
@@ -1465,7 +1614,11 @@ export default function IndentForm() {
                           <select
                             value={item.unit}
                             onChange={updateItem(index, "unit")}
-                            disabled={!requiresIndentQuantity(item)}
+                            disabled={
+                              !requiresIndentQuantity(item) &&
+                              !packageNeedsQuantity(item) &&
+                              !lineNeedsQuantity(item)
+                            }
                             className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
                               errors.items?.[index]?.unit,
                             )}`}
@@ -1557,119 +1710,165 @@ export default function IndentForm() {
                             />
                           </Field>
                         ) : null}
-                        {requiresContractPeriod(item) ? (
-                          <>
-                            <Field label="Extension Allowed?">
+                        {isFrameworkRateContract(item) ? (
+                          <div className="col-span-full grid gap-4 rounded-[24px] border border-blue-100 bg-blue-50/50 p-4 md:grid-cols-3">
+                            <div className="md:col-span-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700">
+                                RC Package and Line Caps
+                              </p>
+                              <p className="mt-1 text-xs text-slate-600">
+                                Use one package name for all categories/accessories sharing the same RC pool. Add a separate line cap only where that category/accessory has its own limit.
+                              </p>
+                            </div>
+                            <Field
+                              label="RC Package Name"
+                              error={errors.items?.[index]?.rc_package_name}
+                            >
+                              <Input
+                                value={item.rc_package_name}
+                                onChange={updateItem(index, "rc_package_name")}
+                                placeholder="Example: Desktop Computer RC"
+                                list={`rc-package-options-${index}`}
+                                className={invalidControlClass(
+                                  errors.items?.[index]?.rc_package_name,
+                                )}
+                              />
+                              <datalist id={`rc-package-options-${index}`}>
+                                {rcPackageNames.map((packageName) => (
+                                  <option key={packageName} value={packageName} />
+                                ))}
+                              </datalist>
+                            </Field>
+                            <Field
+                              label="Package Limit Type"
+                              error={errors.items?.[index]?.rc_package_limit_type}
+                            >
                               <select
-                                value={item.contract_extension_allowed || "no"}
+                                value={item.rc_package_limit_type || "no_fixed_cap"}
                                 onChange={updateItem(
                                   index,
-                                  "contract_extension_allowed",
+                                  "rc_package_limit_type",
                                 )}
-                                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                                className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
+                                  errors.items?.[index]?.rc_package_limit_type,
+                                )}`}
                               >
-                                <option value="no">No</option>
-                                <option value="yes">Yes</option>
+                                {RC_PACKAGE_LIMIT_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
                               </select>
                             </Field>
-                            {item.contract_extension_allowed === "yes" ? (
-                              <>
-                                <Field label="Extension Type">
-                                  <select
-                                    value={
-                                      item.contract_extension_type ||
-                                      "approval_based"
-                                    }
-                                    onChange={updateItem(
-                                      index,
-                                      "contract_extension_type",
-                                    )}
-                                    className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                                  >
-                                    <option value="approval_based">
-                                      As per approval
-                                    </option>
-                                    <option value="quantity_percent">
-                                      Quantity percentage
-                                    </option>
-                                    <option value="quantity_fixed">
-                                      Fixed quantity
-                                    </option>
-                                    <option value="value_percent">
-                                      Value percentage
-                                    </option>
-                                    <option value="value_fixed">
-                                      Fixed value
-                                    </option>
-                                    <option value="time_period">
-                                      Time period
-                                    </option>
-                                  </select>
-                                </Field>
-                                <Field
-                                  label={
-                                    item.contract_extension_type ===
-                                    "time_period"
-                                      ? "Extension Period"
-                                      : "Extension Limit"
-                                  }
-                                  error={
-                                    errors.items?.[index]
-                                      ?.contract_extension_value
-                                  }
-                                >
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={item.contract_extension_value}
-                                    onChange={updateItem(
-                                      index,
-                                      "contract_extension_value",
-                                    )}
-                                    placeholder="Example: 25"
-                                    className={invalidControlClass(
-                                      errors.items?.[index]
-                                        ?.contract_extension_value,
-                                    )}
-                                  />
-                                </Field>
-                                {item.contract_extension_type ===
-                                "time_period" ? (
-                                  <Field
-                                    label="Extension Unit"
-                                    error={
-                                      errors.items?.[index]
-                                        ?.contract_extension_unit
-                                    }
-                                  >
-                                    <select
-                                      value={
-                                        item.contract_extension_unit || "months"
-                                      }
-                                      onChange={updateItem(
-                                        index,
-                                        "contract_extension_unit",
-                                      )}
-                                      className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
-                                        errors.items?.[index]
-                                          ?.contract_extension_unit,
-                                      )}`}
-                                    >
-                                      {CONTRACT_PERIOD_UNITS.map((unit) => (
-                                        <option
-                                          key={unit.value}
-                                          value={unit.value}
-                                        >
-                                          {unit.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </Field>
-                                ) : null}
-                              </>
+                            {packageNeedsValue(item) ? (
+                              <Field
+                                label="Common Package Value"
+                                error={errors.items?.[index]?.rc_package_value_limit}
+                              >
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.rc_package_value_limit}
+                                  onChange={updateItem(index, "rc_package_value_limit")}
+                                  placeholder="Example: 1500000000"
+                                  className={invalidControlClass(
+                                    errors.items?.[index]?.rc_package_value_limit,
+                                  )}
+                                />
+                              </Field>
                             ) : null}
-                          </>
+                            {packageNeedsQuantity(item) ? (
+                              <Field
+                                label="Common Package Quantity"
+                                error={errors.items?.[index]?.rc_package_quantity_limit}
+                              >
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.rc_package_quantity_limit}
+                                  onChange={updateItem(index, "rc_package_quantity_limit")}
+                                  placeholder="Example: 2000"
+                                  className={invalidControlClass(
+                                    errors.items?.[index]?.rc_package_quantity_limit,
+                                  )}
+                                />
+                              </Field>
+                            ) : null}
+                            <Field
+                              label="Line Role"
+                              error={errors.items?.[index]?.rc_line_role}
+                            >
+                              <select
+                                value={item.rc_line_role || "main_category"}
+                                onChange={updateItem(index, "rc_line_role")}
+                                className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
+                                  errors.items?.[index]?.rc_line_role,
+                                )}`}
+                              >
+                                {RC_LINE_ROLE_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                            <Field
+                              label="Line Cap"
+                              error={errors.items?.[index]?.rc_line_cap_type}
+                            >
+                              <select
+                                value={item.rc_line_cap_type || "no_separate_cap"}
+                                onChange={updateItem(index, "rc_line_cap_type")}
+                                className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
+                                  errors.items?.[index]?.rc_line_cap_type,
+                                )}`}
+                              >
+                                {RC_LINE_CAP_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                            {lineNeedsValue(item) ? (
+                              <Field
+                                label="Line Value Cap"
+                                error={errors.items?.[index]?.rc_line_value_limit}
+                              >
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.rc_line_value_limit}
+                                  onChange={updateItem(index, "rc_line_value_limit")}
+                                  placeholder="Optional category/accessory value cap"
+                                  className={invalidControlClass(
+                                    errors.items?.[index]?.rc_line_value_limit,
+                                  )}
+                                />
+                              </Field>
+                            ) : null}
+                            {lineNeedsQuantity(item) ? (
+                              <Field
+                                label="Line Quantity Cap"
+                                error={errors.items?.[index]?.rc_line_quantity_limit}
+                              >
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.rc_line_quantity_limit}
+                                  onChange={updateItem(index, "rc_line_quantity_limit")}
+                                  placeholder="Optional category/accessory quantity cap"
+                                  className={invalidControlClass(
+                                    errors.items?.[index]?.rc_line_quantity_limit,
+                                  )}
+                                />
+                              </Field>
+                            ) : null}
+                          </div>
                         ) : null}
                         <Field label="Specific Make Required?">
                           <select

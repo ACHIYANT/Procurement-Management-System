@@ -9,13 +9,39 @@ const SCOPE_LABELS = {
   rate_contract_framework: "RC - Framework",
 };
 
+const PACKAGE_LIMIT_LABELS = {
+  no_fixed_cap: "No fixed package cap",
+  value: "Package value cap",
+  quantity: "Package quantity cap",
+  quantity_value: "Package quantity + value cap",
+  validity_only: "Validity only",
+};
+
+const LINE_ROLE_LABELS = {
+  main_category: "Main category",
+  accessory: "Accessory",
+  service: "Service",
+  optional_add_on: "Optional add-on",
+};
+
+const LINE_CAP_LABELS = {
+  no_separate_cap: "No separate line cap",
+  rate_only: "Rate only",
+  quantity: "Line quantity cap",
+  value: "Line value cap",
+  quantity_value: "Line quantity + value cap",
+};
+
 export const getIndentItemScopeLabel = (value) =>
   SCOPE_LABELS[String(value || "standard_quantity")] || "Standard Purchase";
 
 export const isValueRateContractItem = (item = {}) =>
-  ["rate_contract_value", "rate_contract_framework"].includes(
+  ["rate_contract_value"].includes(
     item.procurement_scope_type,
   );
+
+export const isFrameworkRateContractItem = (item = {}) =>
+  String(item.procurement_scope_type || "") === "rate_contract_framework";
 
 export const requiresIndentQuantity = (item = {}) =>
   [
@@ -72,6 +98,53 @@ export const formatIndentContractExtension = (item = {}) => {
     : "Extension allowed";
 };
 
+export const getRcPackageLimitLabel = (value) =>
+  PACKAGE_LIMIT_LABELS[String(value || "no_fixed_cap")] || "No fixed package cap";
+
+export const getRcLineRoleLabel = (value) =>
+  LINE_ROLE_LABELS[String(value || "main_category")] || "Main category";
+
+export const getRcLineCapLabel = (value) =>
+  LINE_CAP_LABELS[String(value || "no_separate_cap")] || "No separate line cap";
+
+export const formatRcPackageLimit = (item = {}) => {
+  const type = String(item.rc_package_limit_type || "no_fixed_cap");
+  if (type === "value") return `Common pool ${formatIndentMoney(item.rc_package_value_limit)}`;
+  if (type === "quantity") {
+    return `Common pool ${formatIndentQuantity(item.rc_package_quantity_limit)} ${item.unit || ""}`.trim();
+  }
+  if (type === "quantity_value") {
+    const quantity = item.rc_package_quantity_limit
+      ? `${formatIndentQuantity(item.rc_package_quantity_limit)} ${item.unit || ""}`.trim()
+      : "quantity not entered";
+    const value = item.rc_package_value_limit
+      ? formatIndentMoney(item.rc_package_value_limit)
+      : "value not entered";
+    return `Common pool ${quantity} + ${value}`;
+  }
+  if (type === "validity_only") return "Validity-only package";
+  return "No fixed package quantity/value";
+};
+
+export const formatRcLineCap = (item = {}) => {
+  const type = String(item.rc_line_cap_type || "no_separate_cap");
+  if (type === "rate_only") return "Rate only";
+  if (type === "quantity") {
+    return `Line cap ${formatIndentQuantity(item.rc_line_quantity_limit)} ${item.unit || ""}`.trim();
+  }
+  if (type === "value") return `Line cap ${formatIndentMoney(item.rc_line_value_limit)}`;
+  if (type === "quantity_value") {
+    const quantity = item.rc_line_quantity_limit
+      ? `${formatIndentQuantity(item.rc_line_quantity_limit)} ${item.unit || ""}`.trim()
+      : "quantity not entered";
+    const value = item.rc_line_value_limit
+      ? formatIndentMoney(item.rc_line_value_limit)
+      : "value not entered";
+    return `Line cap ${quantity} + ${value}`;
+  }
+  return "Uses common package pool";
+};
+
 export const formatIndentItemPrimaryMeasure = (item = {}) => {
   const scopeType = String(item.procurement_scope_type || "standard_quantity");
 
@@ -80,9 +153,8 @@ export const formatIndentItemPrimaryMeasure = (item = {}) => {
   }
 
   if (scopeType === "rate_contract_framework") {
-    return item.contract_value_limit
-      ? `Framework ceiling ${formatIndentMoney(item.contract_value_limit)}`
-      : "Framework ceiling not entered";
+    const packageName = item.rc_package_name || "RC package not named";
+    return `${packageName} • ${formatRcPackageLimit(item)} • ${formatRcLineCap(item)}`;
   }
 
   if (scopeType === "rate_contract_value") {

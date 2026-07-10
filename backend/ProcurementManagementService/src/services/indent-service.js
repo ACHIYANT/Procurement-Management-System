@@ -58,6 +58,26 @@ const CONTRACT_EXTENSION_TYPES = new Set([
   "value_fixed",
   "time_period",
 ]);
+const RC_PACKAGE_LIMIT_TYPES = new Set([
+  "no_fixed_cap",
+  "value",
+  "quantity",
+  "quantity_value",
+  "validity_only",
+]);
+const RC_LINE_ROLES = new Set([
+  "main_category",
+  "accessory",
+  "service",
+  "optional_add_on",
+]);
+const RC_LINE_CAP_TYPES = new Set([
+  "no_separate_cap",
+  "rate_only",
+  "quantity",
+  "value",
+  "quantity_value",
+]);
 
 const SCOPE_TYPES_REQUIRING_PERIOD = new Set([
   "amc",
@@ -78,7 +98,6 @@ const SCOPE_TYPES_REQUIRING_QUANTITY = new Set([
 const SCOPE_TYPES_REQUIRING_VALUE = new Set([
   "rate_contract_value",
   "rate_contract_quantity_value",
-  "rate_contract_framework",
 ]);
 
 class IndentService {
@@ -95,11 +114,13 @@ class IndentService {
   }
 
   normalizeAdministrativeApprovalStatus(item = {}) {
-    const estimatedAmount = asAmountNumber(
-      item?.estimated_amount ??
-        item?.estimated_value ??
-        item?.item_value ??
-        item?.contract_value_limit,
+    const estimatedAmount = Math.max(
+      asAmountNumber(item?.estimated_amount),
+      asAmountNumber(item?.estimated_value),
+      asAmountNumber(item?.item_value),
+      asAmountNumber(item?.contract_value_limit),
+      asAmountNumber(item?.rc_package_value_limit),
+      asAmountNumber(item?.rc_line_value_limit),
     );
     if (estimatedAmount >= ADMINISTRATIVE_APPROVAL_THRESHOLD) {
       return "auto_required";
@@ -269,6 +290,25 @@ class IndentService {
       : "approval_based";
   }
 
+  normalizeRcPackageLimitType(value) {
+    const normalized = String(normalizeText(value) || "").toLowerCase();
+    return RC_PACKAGE_LIMIT_TYPES.has(normalized) ? normalized : "no_fixed_cap";
+  }
+
+  normalizeRcLineRole(value) {
+    const normalized = String(normalizeText(value) || "").toLowerCase();
+    return RC_LINE_ROLES.has(normalized) ? normalized : "main_category";
+  }
+
+  normalizeRcLineCapType(value) {
+    const normalized = String(normalizeText(value) || "").toLowerCase();
+    return RC_LINE_CAP_TYPES.has(normalized) ? normalized : "no_separate_cap";
+  }
+
+  isFrameworkRateContract(item = {}) {
+    return this.normalizeItemScopeType(item.procurement_scope_type) === "rate_contract_framework";
+  }
+
   requiresQuantity(item = {}) {
     return SCOPE_TYPES_REQUIRING_QUANTITY.has(
       this.normalizeItemScopeType(item.procurement_scope_type),
@@ -374,6 +414,28 @@ class IndentService {
           contract_extension_unit: contractExtensionAllowed
             ? this.normalizeContractPeriodUnit(item?.contract_extension_unit)
             : null,
+          rc_package_name: normalizeNullableText(item?.rc_package_name),
+          rc_package_limit_type: this.isFrameworkRateContract(item)
+            ? this.normalizeRcPackageLimitType(item?.rc_package_limit_type)
+            : null,
+          rc_package_value_limit: this.isFrameworkRateContract(item)
+            ? normalizeAmount(item?.rc_package_value_limit) || null
+            : null,
+          rc_package_quantity_limit: this.isFrameworkRateContract(item)
+            ? normalizeAmount(item?.rc_package_quantity_limit) || null
+            : null,
+          rc_line_role: this.isFrameworkRateContract(item)
+            ? this.normalizeRcLineRole(item?.rc_line_role)
+            : null,
+          rc_line_cap_type: this.isFrameworkRateContract(item)
+            ? this.normalizeRcLineCapType(item?.rc_line_cap_type)
+            : null,
+          rc_line_value_limit: this.isFrameworkRateContract(item)
+            ? normalizeAmount(item?.rc_line_value_limit) || null
+            : null,
+          rc_line_quantity_limit: this.isFrameworkRateContract(item)
+            ? normalizeAmount(item?.rc_line_quantity_limit) || null
+            : null,
           scope_remarks: normalizeNullableText(item?.scope_remarks),
           specification: normalizeNullableText(item?.specification),
           specific_make_required: this.normalizeYesNoBoolean(item?.specific_make_required),
@@ -402,6 +464,14 @@ class IndentService {
           item.contract_extension_type ||
           item.contract_extension_value !== null ||
           item.contract_extension_unit ||
+          item.rc_package_name ||
+          item.rc_package_limit_type ||
+          item.rc_package_value_limit !== null ||
+          item.rc_package_quantity_limit !== null ||
+          item.rc_line_role ||
+          item.rc_line_cap_type ||
+          item.rc_line_value_limit !== null ||
+          item.rc_line_quantity_limit !== null ||
           item.scope_remarks ||
           item.preferred_make ||
           item.remarks,
@@ -465,6 +535,45 @@ class IndentService {
         error.statusCode = 400;
         throw error;
       }
+      if (item.procurement_scope_type === "rate_contract_framework") {
+        if (!item.rc_package_name) {
+          const error = new Error("Framework rate contract items must have an RC package name.");
+          error.statusCode = 400;
+          throw error;
+        }
+        if (
+          ["value", "quantity_value"].includes(item.rc_package_limit_type) &&
+          !item.rc_package_value_limit
+        ) {
+          const error = new Error("RC package value limit is required for value-capped packages.");
+          error.statusCode = 400;
+          throw error;
+        }
+        if (
+          ["quantity", "quantity_value"].includes(item.rc_package_limit_type) &&
+          !item.rc_package_quantity_limit
+        ) {
+          const error = new Error("RC package quantity limit is required for quantity-capped packages.");
+          error.statusCode = 400;
+          throw error;
+        }
+        if (
+          ["value", "quantity_value"].includes(item.rc_line_cap_type) &&
+          !item.rc_line_value_limit
+        ) {
+          const error = new Error("Line value cap is required for value-capped RC lines.");
+          error.statusCode = 400;
+          throw error;
+        }
+        if (
+          ["quantity", "quantity_value"].includes(item.rc_line_cap_type) &&
+          !item.rc_line_quantity_limit
+        ) {
+          const error = new Error("Line quantity cap is required for quantity-capped RC lines.");
+          error.statusCode = 400;
+          throw error;
+        }
+      }
       if (
         item.contract_extension_allowed &&
         item.contract_extension_type === "time_period" &&
@@ -527,6 +636,14 @@ class IndentService {
       contract_extension_type: item.contract_extension_type,
       contract_extension_value: item.contract_extension_value,
       contract_extension_unit: item.contract_extension_unit,
+      rc_package_name: item.rc_package_name,
+      rc_package_limit_type: item.rc_package_limit_type,
+      rc_package_value_limit: item.rc_package_value_limit,
+      rc_package_quantity_limit: item.rc_package_quantity_limit,
+      rc_line_role: item.rc_line_role,
+      rc_line_cap_type: item.rc_line_cap_type,
+      rc_line_value_limit: item.rc_line_value_limit,
+      rc_line_quantity_limit: item.rc_line_quantity_limit,
       scope_remarks: item.scope_remarks,
       specification: item.specification,
       specific_make_required: item.specific_make_required,
@@ -566,6 +683,14 @@ class IndentService {
       contract_extension_type: item.contract_extension_type,
       contract_extension_value: item.contract_extension_value,
       contract_extension_unit: item.contract_extension_unit,
+      rc_package_name: item.rc_package_name,
+      rc_package_limit_type: item.rc_package_limit_type,
+      rc_package_value_limit: item.rc_package_value_limit,
+      rc_package_quantity_limit: item.rc_package_quantity_limit,
+      rc_line_role: item.rc_line_role,
+      rc_line_cap_type: item.rc_line_cap_type,
+      rc_line_value_limit: item.rc_line_value_limit,
+      rc_line_quantity_limit: item.rc_line_quantity_limit,
       scope_remarks: item.scope_remarks,
       specification: item.specification,
       specific_make_required: item.specific_make_required,
@@ -681,6 +806,14 @@ class IndentService {
           contract_extension_type: item.contract_extension_type,
           contract_extension_value: item.contract_extension_value,
           contract_extension_unit: item.contract_extension_unit,
+          rc_package_name: item.rc_package_name,
+          rc_package_limit_type: item.rc_package_limit_type,
+          rc_package_value_limit: item.rc_package_value_limit,
+          rc_package_quantity_limit: item.rc_package_quantity_limit,
+          rc_line_role: item.rc_line_role,
+          rc_line_cap_type: item.rc_line_cap_type,
+          rc_line_value_limit: item.rc_line_value_limit,
+          rc_line_quantity_limit: item.rc_line_quantity_limit,
           scope_remarks: item.scope_remarks,
         });
       }
