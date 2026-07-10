@@ -109,6 +109,38 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(20),
         allowNull: true,
       },
+      rc_package_name: {
+        type: DataTypes.STRING(180),
+        allowNull: true,
+      },
+      rc_package_limit_type: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+      },
+      rc_package_value_limit: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: true,
+      },
+      rc_package_quantity_limit: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+      },
+      rc_line_role: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+      },
+      rc_line_cap_type: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+      },
+      rc_line_value_limit: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: true,
+      },
+      rc_line_quantity_limit: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+      },
       scope_remarks: {
         type: DataTypes.TEXT,
         allowNull: true,

@@ -25,8 +25,12 @@ import {
   formatIndentContractExtension,
   formatIndentItemPrimaryMeasure,
   formatIndentItemScopeSummary,
+  formatRcLineCap,
+  formatRcPackageLimit,
   getIndentItemScopeLabel,
+  getRcLineRoleLabel,
   isValueRateContractItem,
+  isFrameworkRateContractItem,
 } from "@/lib/indent-item-display";
 import {
   patchProcurement,
@@ -1112,6 +1116,7 @@ export default function IndentDetail() {
                       isMyAssignedItem;
                     const categoryName = item.category?.category_name || "Uncategorized";
                     const subcategoryName = item.subcategory?.subcategory_name || "NA";
+                    const isFrameworkRc = isFrameworkRateContractItem(item);
                     const primaryFacts = [
                       ["Scope", getIndentItemScopeLabel(item.procurement_scope_type)],
                       [
@@ -1140,6 +1145,14 @@ export default function IndentDetail() {
                     const metaFacts = [
                       ["Category", categoryName],
                       ["Sub category", subcategoryName],
+                      ...(isFrameworkRc
+                        ? [
+                            ["RC package", item.rc_package_name || "Not named"],
+                            ["Common pool", formatRcPackageLimit(item)],
+                            ["Line role", getRcLineRoleLabel(item.rc_line_role)],
+                            ["Line cap", formatRcLineCap(item)],
+                          ]
+                        : []),
                       ["Specific make", item.specific_make_required ? "Yes" : "No"],
                       ...(item.scope_remarks
                         ? [["Scope note", item.scope_remarks]]
