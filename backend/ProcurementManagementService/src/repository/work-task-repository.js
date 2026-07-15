@@ -144,6 +144,23 @@ class WorkTaskRepository {
     });
   }
 
+  findActiveReminderSourceTasks(transaction) {
+    return WorkTask.findAll({
+      where: {
+        reminder_at: { [Op.ne]: null },
+        status: { [Op.in]: ["open", "in_progress", "returned", "reassigned"] },
+        [Op.or]: [
+          { system_rule_code: null },
+          { system_rule_code: { [Op.ne]: "task_reminder_occurrence" } },
+        ],
+      },
+      include: taskIncludes,
+      transaction,
+      limit: 500,
+      order: [["reminder_at", "ASC"]],
+    });
+  }
+
   createTask(payload, transaction) {
     return WorkTask.create(payload, { transaction });
   }

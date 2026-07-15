@@ -17,12 +17,13 @@ const startWorkTaskScheduler = () => {
 
   const run = async () => {
     try {
-      const [syncResult, escalationResult] = await Promise.all([
+      const [syncResult, reminderResult, escalationResult] = await Promise.all([
         service.syncSystemTasks(),
+        service.syncReminderOccurrences(),
         service.escalateOverdueTasks(),
       ]);
       console.log(
-        `[WorkTaskScheduler] synced ${syncResult.created} created/${syncResult.updated} updated; escalated ${escalationResult.escalated}.`,
+        `[WorkTaskScheduler] synced ${syncResult.created} created/${syncResult.updated} updated; refreshed ${reminderResult.scanned} reminder sources; escalated ${escalationResult.escalated}.`,
       );
     } catch (error) {
       console.error("[WorkTaskScheduler] run failed:", error.message || error);

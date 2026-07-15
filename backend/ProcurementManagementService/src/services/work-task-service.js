@@ -50,6 +50,7 @@ const ACTIVE_TASK_STATUSES = new Set(["open", "in_progress", "returned", "reassi
 const REMINDER_OCCURRENCE_RULE_CODE = "task_reminder_occurrence";
 const REMINDER_OCCURRENCE_ENTITY_TYPE = "work_task_reminder";
 const MAX_REMINDER_OCCURRENCE_TASKS = 96;
+const SHORT_REMINDER_OCCURRENCE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 const REMINDER_FREQUENCY_INTERVAL_MS = {
   every_15_minutes: 15 * 60 * 1000,
   hourly: 60 * 60 * 1000,
@@ -266,6 +267,18 @@ const isSameMinute = (first, second) => {
 const getReminderOccurrenceEntityId = (taskId, occurrenceAt) =>
   `${taskId}:${occurrenceAt.toISOString()}`;
 
+const getNextReminderOccurrence = ({ reminderAt, dueAt, intervalMs, now = new Date() }) => {
+  if (!intervalMs || !reminderAt) return null;
+  if (dueAt && now >= dueAt) return null;
+  if (now <= reminderAt) return reminderAt;
+
+  const elapsed = now.getTime() - reminderAt.getTime();
+  const steps = Math.ceil(elapsed / intervalMs);
+  const next = new Date(reminderAt.getTime() + steps * intervalMs);
+  if (dueAt && next >= dueAt) return null;
+  return next;
+};
+
 const buildReminderOccurrences = (task = {}) => {
   if (!task?.id || task.system_rule_code === REMINDER_OCCURRENCE_RULE_CODE) return [];
   if (!ACTIVE_TASK_STATUSES.has(task.status)) return [];
@@ -282,8 +295,13 @@ const buildReminderOccurrences = (task = {}) => {
     return isSameMinute(reminderAt, dueAt) ? [] : [reminderAt];
   }
 
+  if (intervalMs < SHORT_REMINDER_OCCURRENCE_THRESHOLD_MS) {
+    const nextOccurrence = getNextReminderOccurrence({ reminderAt, dueAt, intervalMs });
+    return nextOccurrence && !isSameMinute(nextOccurrence, dueAt) ? [nextOccurrence] : [];
+  }
+
   const occurrences = [];
-  let cursor = new Date(reminderAt);
+  let cursor = getNextReminderOccurrence({ reminderAt, dueAt, intervalMs }) || new Date(reminderAt);
   while (cursor < dueAt && occurrences.length < MAX_REMINDER_OCCURRENCE_TASKS) {
     if (!isSameMinute(cursor, dueAt)) {
       occurrences.push(new Date(cursor));
@@ -349,6 +367,58 @@ class WorkTaskService {
       name: employee.employee_name || actorName,
       employee_name: employee.employee_name || actor.employee_name,
     };
+  }
+
+  async resolveReminderAssignees(task = {}) {
+    const rawAssignees = (task.assignees || [])
+      .map((assignee) => ({
+        assigned_to_employee_id: assignee.assigned_to_employee_id,
+        assigned_to_name:
+          assignee.assigned_to_name ||
+          assignee.assigned_to_employee?.employee_name ||
+          null,
+      }))
+      .filter((assignee) => assignee.assigned_to_employee_id || assignee.assigned_to_name);
+
+    if (!rawAssignees.length && (task.created_by_employee_id || task.created_by_name)) {
+      rawAssignees.push({
+        assigned_to_employee_id: task.created_by_employee_id,
+        assigned_to_name: task.created_by_name,
+      });
+    }
+
+    if (!rawAssignees.length && (task.assigned_by_employee_id || task.assigned_by_name)) {
+      rawAssignees.push({
+        assigned_to_employee_id: task.assigned_by_employee_id,
+        assigned_to_name: task.assigned_by_name,
+      });
+    }
+
+    const resolvedAssignees = [];
+    const seen = new Set();
+
+    for (const assignee of rawAssignees) {
+      const resolved = assignee.assigned_to_employee_id
+        ? assignee
+        : await this.resolveActorIdentity({ name: assignee.assigned_to_name });
+      const normalized = {
+        assigned_to_employee_id: resolved.employee_id || assignee.assigned_to_employee_id || null,
+        assigned_to_name:
+          resolved.employee_name ||
+          resolved.name ||
+          assignee.assigned_to_name ||
+          null,
+      };
+      const key = normalized.assigned_to_employee_id
+        ? `id:${normalized.assigned_to_employee_id}`
+        : `name:${normalized.assigned_to_name}`;
+      if (!normalized.assigned_to_employee_id && !normalized.assigned_to_name) continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      resolvedAssignees.push(normalized);
+    }
+
+    return resolvedAssignees;
   }
 
   normalizeTaskPayload(payload = {}, actor = {}) {
@@ -493,10 +563,7 @@ class WorkTaskService {
 
     for (const occurrenceAt of occurrences) {
       const entityId = getReminderOccurrenceEntityId(task.id, occurrenceAt);
-      const assignees = (task.assignees || []).map((assignee) => ({
-        assigned_to_employee_id: assignee.assigned_to_employee_id,
-        assigned_to_name: assignee.assigned_to_name,
-      }));
+      const assignees = await this.resolveReminderAssignees(task);
 
       await this.createOrUpdateSystemTask(
         {
@@ -562,6 +629,19 @@ class WorkTaskService {
       const createdTask = await this.repository.findTaskById(task.id, transaction);
       await this.syncReminderOccurrenceTasksForTask(createdTask, transaction);
       return this.repository.findTaskById(task.id, transaction);
+    });
+  }
+
+  async syncReminderOccurrences() {
+    const result = { scanned: 0 };
+
+    return sequelize.transaction(async (transaction) => {
+      const reminderSourceTasks = await this.repository.findActiveReminderSourceTasks(transaction);
+      for (const task of reminderSourceTasks) {
+        result.scanned += 1;
+        await this.syncReminderOccurrenceTasksForTask(task, transaction);
+      }
+      return result;
     });
   }
 
