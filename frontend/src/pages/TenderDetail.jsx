@@ -22,6 +22,11 @@ import {
 } from "@/lib/amount-format";
 import { Input } from "@/components/ui/input";
 import {
+  formatIndentItemPrimaryMeasure,
+  getRcLineRoleLabel,
+  isFrameworkRateContractItem,
+} from "@/lib/indent-item-display";
+import {
   deleteProcurement,
   patchProcurement,
   postProcurement,
@@ -154,8 +159,23 @@ const getTenderItemDisplayName = (item, index) => {
   const category = item?.indent_item?.category?.category_name;
   const subcategory = item?.indent_item?.subcategory?.subcategory_name;
   const itemName = item?.indent_item?.item_name;
+  const indentItem = item?.indent_item || {};
   if (category || subcategory) {
-    return [category, subcategory].filter(Boolean).join(" / ");
+    const baseLabel = [category, subcategory].filter(Boolean).join(" / ");
+    if (isFrameworkRateContractItem(indentItem)) {
+      const packageName = indentItem.rc_package_name || "RC package";
+      const lineRole = getRcLineRoleLabel(indentItem.rc_line_role);
+      return [baseLabel, packageName, lineRole].filter(Boolean).join(" • ");
+    }
+    return baseLabel;
+  }
+  if (isFrameworkRateContractItem(indentItem)) {
+    return [
+      itemName || `Item ${index + 1}`,
+      formatIndentItemPrimaryMeasure(indentItem),
+    ]
+      .filter(Boolean)
+      .join(" • ");
   }
   return itemName || `Item ${index + 1}`;
 };
@@ -4454,13 +4474,15 @@ export default function TenderDetail() {
                         Bidder eligible for issuance of the LOA/RC/PO
                       </p>
                       <h3 className="mt-1 text-xl font-semibold tracking-[-0.03em] text-[#1d1d1f]">
-                        Allocation against eligible L1 bidder
+                        Allocation against eligible L1 bidders
                       </h3>
                       <p className="mt-1 text-sm leading-6 text-black/56">
                         Select whether the order split is being recorded by
                         quantity or by amount, then enter the allocation for
-                        the L1 bidder. Once saved, this basis is frozen for this
-                        tender.
+                        each eligible L1 bidder. If rates are tied, more than
+                        one bidder can appear here. For framework RC packages,
+                        item-wise categories can move to different bidders and
+                        be split independently by quantity or amount.
                       </p>
                     </div>
                     <label className="space-y-1">
@@ -4518,7 +4540,7 @@ export default function TenderDetail() {
                       <thead className={tableHeadClass}>
                         <tr>
                             <th className={`${stickyFirstHeadClass} px-4 py-3`}>S.No.</th>
-                            <th className={`${stickySecondHeadClass} px-4 py-3`}>Name of firm as L1</th>
+                            <th className={`${stickySecondHeadClass} px-4 py-3`}>Firm as L1 / eligible bidder</th>
                           <th className="px-4 py-3">
                             {effectiveAllocationBasis === "amount"
                               ? "Item-wise Amount Allocated"
@@ -4546,6 +4568,13 @@ export default function TenderDetail() {
                                 <td className={`${stickyFirstCellClass} px-4 py-3`}>{index + 1}</td>
                                 <td className={`${stickySecondCellClass} px-4 py-3 font-medium`}>
                                   {vendor?.firm?.firm_name || "NA"}
+                                  {effectiveAllocationScope === "item_wise" ? (
+                                    <div className="mt-1 text-[11px] font-normal text-slate-500">
+                                      {((itemWiseL1ItemIdsByVendorId[vendor.id] || []).length)
+                                        ? `${(itemWiseL1ItemIdsByVendorId[vendor.id] || []).length} item${(itemWiseL1ItemIdsByVendorId[vendor.id] || []).length === 1 ? "" : "s"} eligible`
+                                        : "No item-wise L1 category"}
+                                    </div>
+                                  ) : null}
                                 </td>
                                 <td className="px-4 py-3">
                                   {renderVendorItemQuoteEditor(vendor, {

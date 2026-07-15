@@ -550,6 +550,9 @@ const getBrowserStorageValue = (key) => {
   }
 };
 
+const getFirstAvailableValue = (...values) =>
+  values.find((value) => String(value || "").trim()) || "";
+
 const wasReminderAlreadyShown = (storageKey) => {
   try {
     return Boolean(localStorage.getItem(storageKey));
@@ -1530,11 +1533,23 @@ export default function WorkDesk() {
 
   const actorPayload = useMemo(
     () => ({
-      actor_employee_id: profile?.employee_id || profile?.id || null,
+      actor_employee_id:
+        profile?.employee_id ||
+        profile?.procurement_employee_id ||
+        profile?.id ||
+        null,
+      actor_empcode: profile?.empcode || getBrowserStorageValue("empcode") || "",
+      actor_mobile_no:
+        profile?.mobile_no ||
+        profile?.mobileno ||
+        getBrowserStorageValue("mobileno") ||
+        "",
       actor_name:
-        profile?.employee_name ||
-        profile?.fullname ||
-        getBrowserStorageValue("fullname") ||
+        getFirstAvailableValue(
+          profile?.employee_name,
+          profile?.fullname,
+          getBrowserStorageValue("fullname"),
+        ) ||
         "Procurement User",
       actor_roles: roles,
     }),
@@ -1558,22 +1573,30 @@ export default function WorkDesk() {
       });
       const shouldLoadAllTasks = canViewAllTasks && scope === "all";
       const shouldLoadAllCompletedTasks = isCompletedFilter && shouldLoadAllTasks && !isCompletedByMeFilter;
+      const actorName = String(actorPayload.actor_name || "").trim();
       const shouldLoadOwnTasks = isCompletedFilter
-        ? Boolean(currentEmployeeId)
-        : !shouldLoadAllTasks && currentEmployeeId;
+        ? Boolean(currentEmployeeId || actorName)
+        : !shouldLoadAllTasks && (currentEmployeeId || actorName);
       const shouldLoadNoTasks = isCompletedFilter
-        ? !shouldLoadAllCompletedTasks && !currentEmployeeId
-        : !shouldLoadAllTasks && !currentEmployeeId;
+        ? !shouldLoadAllCompletedTasks && !currentEmployeeId && !actorName
+        : !shouldLoadAllTasks && !currentEmployeeId && !actorName;
 
       if (isCompletedByMeFilter && currentEmployeeId) {
         params.set("completed_by_employee_id", currentEmployeeId);
       } else if (shouldLoadOwnTasks) {
-        params.set("employee_id", currentEmployeeId);
+        if (currentEmployeeId) {
+          params.set("employee_id", currentEmployeeId);
+        } else {
+          params.set("employee_name", actorName);
+        }
       }
 
       const taskRequest = (() => {
         if (shouldLoadNoTasks) return Promise.resolve([]);
         if (!isCompletedFilter || shouldLoadAllCompletedTasks) {
+          return procurementRequest(`/work-tasks?${params.toString()}`);
+        }
+        if (!currentEmployeeId && actorName) {
           return procurementRequest(`/work-tasks?${params.toString()}`);
         }
 
@@ -1625,7 +1648,7 @@ export default function WorkDesk() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [activeFilter, canViewAllTasks, currentEmployeeId, scope, taskView, workMode]);
+  }, [activeFilter, actorPayload.actor_name, canViewAllTasks, currentEmployeeId, scope, taskView, workMode]);
 
   useEffect(() => {
     const timer = setTimeout(() => loadData(), 0);

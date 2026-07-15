@@ -154,7 +154,8 @@ export const formatIndentItemPrimaryMeasure = (item = {}) => {
 
   if (scopeType === "rate_contract_framework") {
     const packageName = item.rc_package_name || "RC package not named";
-    return `${packageName} • ${formatRcPackageLimit(item)} • ${formatRcLineCap(item)}`;
+    const lineRole = getRcLineRoleLabel(item.rc_line_role);
+    return `${packageName} • ${lineRole} • ${formatRcPackageLimit(item)} • ${formatRcLineCap(item)}`;
   }
 
   if (scopeType === "rate_contract_value") {
