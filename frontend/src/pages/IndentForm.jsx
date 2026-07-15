@@ -484,12 +484,19 @@ export default function IndentForm() {
   });
   const [errors, setErrors] = useState({});
   const [activeItemIndex, setActiveItemIndex] = useState(0);
+  const [expandedAssistSections, setExpandedAssistSections] = useState({
+    pdf: false,
+    quick: false,
+  });
   const [saving, setSaving] = useState("");
   const [popup, setPopup] = useState({
     open: false,
     type: "info",
     message: "",
   });
+  const rcPackageCardRefs = useRef(new Map());
+  const lastFocusedRcPackageKeyRef = useRef("");
+  const [focusedRcPackageIndex, setFocusedRcPackageIndex] = useState(null);
   const [departmentOptions, setDepartmentOptions] = useState(() =>
     getHaryanaGovernmentMasterTree(),
   );
@@ -505,6 +512,53 @@ export default function IndentForm() {
       ),
     [form.items],
   );
+  const rcPackageGroups = useMemo(() => {
+    const groups = new Map();
+
+    form.items.forEach((item, index) => {
+      if (!isFrameworkRateContract(item)) return;
+      const packageName = String(item.rc_package_name || "").trim();
+      const mapKey = packageName
+        ? `package:${packageName.toLowerCase()}`
+        : `line:${index}`;
+
+      if (!groups.has(mapKey)) {
+        groups.set(mapKey, {
+          key: `rc-parent:${index}`,
+          mapKey,
+          packageName,
+          firstIndex: index,
+          lineIndexes: [],
+        });
+      }
+      groups.get(mapKey).lineIndexes.push(index);
+    });
+
+    return Array.from(groups.values());
+  }, [form.items]);
+
+  useEffect(() => {
+    if (focusedRcPackageIndex === null) return undefined;
+    const targetGroup = rcPackageGroups.find((group) =>
+      group.lineIndexes.includes(focusedRcPackageIndex),
+    );
+    if (!targetGroup) return undefined;
+    const focusKey = `${focusedRcPackageIndex}:${targetGroup.key}`;
+    if (lastFocusedRcPackageKeyRef.current === focusKey) return undefined;
+    lastFocusedRcPackageKeyRef.current = focusKey;
+    const timer = setTimeout(() => {
+      const targetCard = rcPackageCardRefs.current.get(targetGroup.key);
+      targetCard?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      targetCard
+        ?.querySelector("input, select, textarea, button")
+        ?.focus({ preventScroll: true });
+    }, 80);
+
+    return () => clearTimeout(timer);
+  }, [focusedRcPackageIndex, rcPackageGroups]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -689,9 +743,16 @@ export default function IndentForm() {
     setErrors((current) => ({ ...current, [field]: undefined }));
   };
 
+  const toggleItemCard = (index) => {
+    setActiveItemIndex((current) => (current === index ? null : index));
+  };
+
   const updateItem = (index, field) => (event) => {
     const value = event.target.value;
     setActiveItemIndex(index);
+    if (field === "procurement_scope_type" && value === "rate_contract_framework") {
+      setFocusedRcPackageIndex(index);
+    }
     setForm((current) => {
       const items = current.items.map((item, itemIndex) => {
         if (itemIndex !== index) return item;
@@ -787,6 +848,76 @@ export default function IndentForm() {
       if (Array.isArray(next.items) && next.items[index]) {
         next.items = [...next.items];
         next.items[index] = { ...next.items[index], [field]: undefined };
+      }
+      return next;
+    });
+  };
+
+  const updateRcPackageGroup = (group, field) => (event) => {
+    const value = event.target.value;
+    const affectedIndexes = new Set(group.lineIndexes);
+    setActiveItemIndex(group.firstIndex);
+
+    setForm((current) => {
+      const items = current.items.map((item, itemIndex) => {
+        if (!affectedIndexes.has(itemIndex)) return item;
+        const nextItem = { ...item, [field]: value };
+
+        if (field === "rc_package_name") {
+          const matchingPackage = current.items.find(
+            (entry, entryIndex) =>
+              !affectedIndexes.has(entryIndex) &&
+              String(entry.rc_package_name || "").trim().toLowerCase() ===
+                String(value || "").trim().toLowerCase(),
+          );
+          if (matchingPackage) {
+            nextItem.rc_package_limit_type =
+              matchingPackage.rc_package_limit_type || "no_fixed_cap";
+            nextItem.rc_package_value_limit =
+              matchingPackage.rc_package_value_limit || "";
+            nextItem.rc_package_quantity_limit =
+              matchingPackage.rc_package_quantity_limit || "";
+            nextItem.contract_period_value =
+              matchingPackage.contract_period_value || nextItem.contract_period_value;
+            nextItem.contract_period_unit =
+              matchingPackage.contract_period_unit || nextItem.contract_period_unit;
+          }
+        }
+
+        if (field === "rc_package_limit_type") {
+          if (!["value", "quantity_value"].includes(value)) {
+            nextItem.rc_package_value_limit = "";
+          }
+          if (!["quantity", "quantity_value"].includes(value)) {
+            nextItem.rc_package_quantity_limit = "";
+          }
+        }
+
+        if (
+          field === "rc_package_value_limit" ||
+          field === "rc_package_limit_type"
+        ) {
+          nextItem.administrative_approval_status =
+            shouldAutoRequireAdministrativeApproval(nextItem)
+              ? "auto_required"
+              : nextItem.administrative_approval_status === "auto_required"
+                ? "not_required"
+                : nextItem.administrative_approval_status;
+        }
+
+        return nextItem;
+      });
+
+      return { ...current, items };
+    });
+
+    setErrors((current) => {
+      const next = { ...current };
+      if (Array.isArray(next.items)) {
+        next.items = next.items.map((itemErrors, itemIndex) => {
+          if (!affectedIndexes.has(itemIndex) || !itemErrors) return itemErrors;
+          return { ...itemErrors, [field]: undefined };
+        });
       }
       return next;
     });
@@ -890,6 +1021,13 @@ export default function IndentForm() {
     setActiveItemIndex(form.items.length);
   };
 
+  const toggleAssistSection = (section) => {
+    setExpandedAssistSections((current) => ({
+      ...current,
+      [section]: !current[section],
+    }));
+  };
+
   const removeItem = (index) => () => {
     setForm((current) => ({
       ...current,
@@ -900,6 +1038,7 @@ export default function IndentForm() {
     }));
     setActiveItemIndex((current) => {
       const nextLength = Math.max(form.items.length - 1, 1);
+      if (current === null) return null;
       if (nextLength === 1) return 0;
       if (current === index) return Math.max(index - 1, 0);
       if (current > index) return current - 1;
@@ -1396,8 +1535,212 @@ export default function IndentForm() {
                     </Button>
                   </div>
 
+                  {rcPackageGroups.length ? (
+                    <div className="space-y-3">
+                      {rcPackageGroups.map((group) => {
+                        const parentIndex = group.firstIndex;
+                        const parentItem = form.items[parentIndex];
+
+                        return (
+                          <div
+                            key={group.key}
+                            ref={(node) => {
+                              if (node) {
+                                rcPackageCardRefs.current.set(group.key, node);
+                              } else {
+                                rcPackageCardRefs.current.delete(group.key);
+                              }
+                            }}
+                            className="rounded-[28px] border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-slate-50 p-5 shadow-sm ring-1 ring-blue-50"
+                          >
+                            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-blue-700">
+                                  RC Package Parent
+                                </p>
+                                <h3 className="mt-1 text-lg font-semibold text-slate-950">
+                                  {parentItem.rc_package_name ||
+                                    `Package parent for RC line ${parentIndex + 1}`}
+                                </h3>
+                                <p className="mt-1 max-w-3xl text-sm text-slate-600">
+                                  Define this package once here. All linked RC
+                                  lines below share this package validity and
+                                  common quantity/value pool.
+                                </p>
+                              </div>
+                              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-100">
+                                {group.lineIndexes.length} linked line
+                                {group.lineIndexes.length === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-3">
+                              <Field
+                                label="RC Package Name"
+                                error={errors.items?.[parentIndex]?.rc_package_name}
+                              >
+                                <Input
+                                  value={parentItem.rc_package_name}
+                                  onChange={updateRcPackageGroup(
+                                    group,
+                                    "rc_package_name",
+                                  )}
+                                  placeholder="Example: Desktop Computer RC"
+                                  list={`rc-package-parent-options-${parentIndex}`}
+                                  className={invalidControlClass(
+                                    errors.items?.[parentIndex]?.rc_package_name,
+                                  )}
+                                />
+                                <datalist
+                                  id={`rc-package-parent-options-${parentIndex}`}
+                                >
+                                  {rcPackageNames.map((packageName) => (
+                                    <option key={packageName} value={packageName} />
+                                  ))}
+                                </datalist>
+                              </Field>
+                              <Field
+                                label="Contract Period"
+                                error={
+                                  errors.items?.[parentIndex]
+                                    ?.contract_period_value
+                                }
+                              >
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={parentItem.contract_period_value}
+                                  onChange={updateRcPackageGroup(
+                                    group,
+                                    "contract_period_value",
+                                  )}
+                                  className={invalidControlClass(
+                                    errors.items?.[parentIndex]
+                                      ?.contract_period_value,
+                                  )}
+                                />
+                              </Field>
+                              <Field
+                                label="Period Unit"
+                                error={
+                                  errors.items?.[parentIndex]
+                                    ?.contract_period_unit
+                                }
+                              >
+                                <select
+                                  value={parentItem.contract_period_unit || "months"}
+                                  onChange={updateRcPackageGroup(
+                                    group,
+                                    "contract_period_unit",
+                                  )}
+                                  className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
+                                    errors.items?.[parentIndex]
+                                      ?.contract_period_unit,
+                                  )}`}
+                                >
+                                  {CONTRACT_PERIOD_UNITS.map((unit) => (
+                                    <option key={unit.value} value={unit.value}>
+                                      {unit.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                              <Field
+                                label="Package Limit Type"
+                                error={
+                                  errors.items?.[parentIndex]
+                                    ?.rc_package_limit_type
+                                }
+                              >
+                                <select
+                                  value={
+                                    parentItem.rc_package_limit_type ||
+                                    "no_fixed_cap"
+                                  }
+                                  onChange={updateRcPackageGroup(
+                                    group,
+                                    "rc_package_limit_type",
+                                  )}
+                                  className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
+                                    errors.items?.[parentIndex]
+                                      ?.rc_package_limit_type,
+                                  )}`}
+                                >
+                                  {RC_PACKAGE_LIMIT_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                              {packageNeedsValue(parentItem) ? (
+                                <Field
+                                  label="Common Package Value"
+                                  error={
+                                    errors.items?.[parentIndex]
+                                      ?.rc_package_value_limit
+                                  }
+                                >
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={parentItem.rc_package_value_limit}
+                                    onChange={updateRcPackageGroup(
+                                      group,
+                                      "rc_package_value_limit",
+                                    )}
+                                    placeholder="Example: 1500000000"
+                                    className={invalidControlClass(
+                                      errors.items?.[parentIndex]
+                                        ?.rc_package_value_limit,
+                                    )}
+                                  />
+                                </Field>
+                              ) : null}
+                              {packageNeedsQuantity(parentItem) ? (
+                                <Field
+                                  label="Common Package Quantity"
+                                  error={
+                                    errors.items?.[parentIndex]
+                                      ?.rc_package_quantity_limit
+                                  }
+                                >
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={parentItem.rc_package_quantity_limit}
+                                    onChange={updateRcPackageGroup(
+                                      group,
+                                      "rc_package_quantity_limit",
+                                    )}
+                                    placeholder="Example: 2000"
+                                    className={invalidControlClass(
+                                      errors.items?.[parentIndex]
+                                        ?.rc_package_quantity_limit,
+                                    )}
+                                  />
+                                </Field>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
                   {form.items.map((item, index) => {
                     const isActiveItem = index === activeItemIndex;
+                    const isPackageRcLine = isFrameworkRateContract(item);
+                    const lineLabel = isPackageRcLine
+                      ? `RC Line ${index + 1}`
+                      : `Item ${index + 1}`;
+                    const rcPackageLabel = String(item.rc_package_name || "").trim();
+                    const showQuantityAndUnit =
+                      requiresIndentQuantity(item) ||
+                      packageNeedsQuantity(item) ||
+                      lineNeedsQuantity(item);
                     const itemCategory = itemCategories.find(
                       (category) => String(category.id) === String(item.category_id),
                     );
@@ -1431,7 +1774,7 @@ export default function IndentForm() {
                       <div className="flex items-center justify-between gap-3">
                         <button
                           type="button"
-                          onClick={() => setActiveItemIndex(index)}
+                          onClick={() => toggleItemCard(index)}
                           className="flex min-w-0 flex-1 items-center gap-3 text-left"
                         >
                           <span
@@ -1446,8 +1789,15 @@ export default function IndentForm() {
                           <span className="min-w-0">
                             <span className="flex flex-wrap items-center gap-2">
                               <span className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
-                                Item {index + 1}
+                                {lineLabel}
                               </span>
+                              {isPackageRcLine ? (
+                                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700 ring-1 ring-blue-100">
+                                  {rcPackageLabel
+                                    ? `Package: ${rcPackageLabel}`
+                                    : "Package not named"}
+                                </span>
+                              ) : null}
                               {!isActiveItem ? (
                                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                                   Collapsed
@@ -1481,14 +1831,14 @@ export default function IndentForm() {
                             variant="outline"
                             size="sm"
                             className="gap-2"
-                            onClick={() => setActiveItemIndex(index)}
+                            onClick={() => toggleItemCard(index)}
                           >
                             <ChevronDown
                               className={`h-4 w-4 transition ${
                                 isActiveItem ? "rotate-180" : ""
                               }`}
                             />
-                            {isActiveItem ? "Open" : "Edit"}
+                            {isActiveItem ? "Close" : "Open"}
                           </Button>
                           <Button
                             type="button"
@@ -1589,49 +1939,42 @@ export default function IndentForm() {
                             }
                           </p>
                         </Field>
-                        <Field
-                          label="Quantity"
-                          error={errors.items?.[index]?.quantity}
-                        >
-                          <Input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={item.quantity}
-                            onChange={updateItem(index, "quantity")}
-                            disabled={!requiresIndentQuantity(item)}
-                            placeholder={
-                              !requiresIndentQuantity(item)
-                                ? "Not required for this scope"
-                                : ""
-                            }
-                            className={invalidControlClass(
-                              errors.items?.[index]?.quantity,
-                            )}
-                          />
-                        </Field>
-                        <Field label="Unit" error={errors.items?.[index]?.unit}>
-                          <select
-                            value={item.unit}
-                            onChange={updateItem(index, "unit")}
-                            disabled={
-                              !requiresIndentQuantity(item) &&
-                              !packageNeedsQuantity(item) &&
-                              !lineNeedsQuantity(item)
-                            }
-                            className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
-                              errors.items?.[index]?.unit,
-                            )}`}
+                        {requiresIndentQuantity(item) ? (
+                          <Field
+                            label="Quantity"
+                            error={errors.items?.[index]?.quantity}
                           >
-                            <option value="">Select unit</option>
-                            {UNIT_OPTIONS.map((unit) => (
-                              <option key={unit} value={unit}>
-                                {unit}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        {requiresContractPeriod(item) ? (
+                            <Input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={item.quantity}
+                              onChange={updateItem(index, "quantity")}
+                              className={invalidControlClass(
+                                errors.items?.[index]?.quantity,
+                              )}
+                            />
+                          </Field>
+                        ) : null}
+                        {showQuantityAndUnit ? (
+                          <Field label="Unit" error={errors.items?.[index]?.unit}>
+                            <select
+                              value={item.unit}
+                              onChange={updateItem(index, "unit")}
+                              className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
+                                errors.items?.[index]?.unit,
+                              )}`}
+                            >
+                              <option value="">Select unit</option>
+                              {UNIT_OPTIONS.map((unit) => (
+                                <option key={unit} value={unit}>
+                                  {unit}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                        ) : null}
+                        {requiresContractPeriod(item) && !isFrameworkRateContract(item) ? (
                           <>
                             <Field
                               label="Contract Period"
@@ -1714,88 +2057,36 @@ export default function IndentForm() {
                           <div className="col-span-full grid gap-4 rounded-[24px] border border-blue-100 bg-blue-50/50 p-4 md:grid-cols-3">
                             <div className="md:col-span-3">
                               <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700">
-                                RC Package and Line Caps
+                                RC Line Details
                               </p>
                               <p className="mt-1 text-xs text-slate-600">
-                                Use one package name for all categories/accessories sharing the same RC pool. Add a separate line cap only where that category/accessory has its own limit.
+                                This row is one category, accessory, service, or add-on
+                                under the parent package shown above.
                               </p>
                             </div>
                             <Field
-                              label="RC Package Name"
+                              label="Belongs To RC Package"
                               error={errors.items?.[index]?.rc_package_name}
                             >
-                              <Input
+                              <select
                                 value={item.rc_package_name}
                                 onChange={updateItem(index, "rc_package_name")}
-                                placeholder="Example: Desktop Computer RC"
-                                list={`rc-package-options-${index}`}
-                                className={invalidControlClass(
-                                  errors.items?.[index]?.rc_package_name,
-                                )}
-                              />
-                              <datalist id={`rc-package-options-${index}`}>
-                                {rcPackageNames.map((packageName) => (
-                                  <option key={packageName} value={packageName} />
-                                ))}
-                              </datalist>
-                            </Field>
-                            <Field
-                              label="Package Limit Type"
-                              error={errors.items?.[index]?.rc_package_limit_type}
-                            >
-                              <select
-                                value={item.rc_package_limit_type || "no_fixed_cap"}
-                                onChange={updateItem(
-                                  index,
-                                  "rc_package_limit_type",
-                                )}
                                 className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${invalidControlClass(
-                                  errors.items?.[index]?.rc_package_limit_type,
+                                  errors.items?.[index]?.rc_package_name,
                                 )}`}
                               >
-                                {RC_PACKAGE_LIMIT_OPTIONS.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
+                                <option value="">Select package parent</option>
+                                {rcPackageNames.map((packageName) => (
+                                  <option key={packageName} value={packageName}>
+                                    {packageName}
                                   </option>
                                 ))}
                               </select>
+                              <p className="mt-1 text-xs text-slate-500">
+                                To create another parent, name a separate RC package
+                                card above. Select that name here for all its child lines.
+                              </p>
                             </Field>
-                            {packageNeedsValue(item) ? (
-                              <Field
-                                label="Common Package Value"
-                                error={errors.items?.[index]?.rc_package_value_limit}
-                              >
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={item.rc_package_value_limit}
-                                  onChange={updateItem(index, "rc_package_value_limit")}
-                                  placeholder="Example: 1500000000"
-                                  className={invalidControlClass(
-                                    errors.items?.[index]?.rc_package_value_limit,
-                                  )}
-                                />
-                              </Field>
-                            ) : null}
-                            {packageNeedsQuantity(item) ? (
-                              <Field
-                                label="Common Package Quantity"
-                                error={errors.items?.[index]?.rc_package_quantity_limit}
-                              >
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={item.rc_package_quantity_limit}
-                                  onChange={updateItem(index, "rc_package_quantity_limit")}
-                                  placeholder="Example: 2000"
-                                  className={invalidControlClass(
-                                    errors.items?.[index]?.rc_package_quantity_limit,
-                                  )}
-                                />
-                              </Field>
-                            ) : null}
                             <Field
                               label="Line Role"
                               error={errors.items?.[index]?.rc_line_role}
@@ -2002,55 +2293,90 @@ export default function IndentForm() {
 
                         {pdfAssist.suggestions.length ? (
                           <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">
-                              Detected From Selected PDF
-                            </p>
-                            <p className="mt-1 text-xs leading-5 text-blue-900/70">
-                              Click only the details that belong to this item.
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {pdfAssist.suggestions.map((suggestion) => (
-                                <button
-                                  key={`pdf-${index}-${suggestion}`}
-                                  type="button"
-                                  onClick={() => appendSpecificationSuggestion(index, suggestion)}
-                                  className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
-                                >
-                                  + {suggestion}
-                                </button>
-                              ))}
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => toggleAssistSection("pdf")}
+                              className="flex w-full items-center justify-between gap-3 text-left"
+                            >
+                              <span>
+                                <span className="block text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">
+                                  Detected From Selected PDF
+                                </span>
+                                <span className="mt-1 block text-xs leading-5 text-blue-900/70">
+                                  {pdfAssist.suggestions.length} suggestions available. Expand and click only details that belong to this item.
+                                </span>
+                              </span>
+                              <ChevronDown
+                                className={`h-4 w-4 shrink-0 text-blue-700 transition ${
+                                  expandedAssistSections.pdf ? "rotate-180" : ""
+                                }`}
+                              />
+                            </button>
+                            {expandedAssistSections.pdf ? (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {pdfAssist.suggestions.map((suggestion) => (
+                                  <button
+                                    key={`pdf-${index}-${suggestion}`}
+                                    type="button"
+                                    onClick={() => appendSpecificationSuggestion(index, suggestion)}
+                                    className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                                  >
+                                    + {suggestion}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
 
-                        <div className="mt-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                            Quick Add
-                          </p>
-                          <div className="mt-2 space-y-3">
-                            {specificationGroups.map((group) => (
-                              <div key={group.label}>
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                                  {group.label}
-                                </p>
-                                <div className="mt-1.5 flex flex-wrap gap-2">
-                                  {group.suggestions.map((suggestion) => (
-                                    <button
-                                      key={`${group.label}-${suggestion}`}
-                                      type="button"
-                                      onClick={() =>
-                                        appendSpecificationSuggestion(index, suggestion)
-                                      }
-                                      className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-200 hover:bg-blue-100"
-                                    >
-                                      + {suggestion}
-                                    </button>
-                                  ))}
-                                </div>
+                        {specificationGroups.length ? (
+                          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleAssistSection("quick")}
+                              className="flex w-full items-center justify-between gap-3 text-left"
+                            >
+                              <span>
+                                <span className="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                                  Quick Add
+                                </span>
+                                <span className="mt-1 block text-xs text-slate-500">
+                                  Expand common specification chips for the selected category.
+                                </span>
+                              </span>
+                              <ChevronDown
+                                className={`h-4 w-4 shrink-0 text-slate-500 transition ${
+                                  expandedAssistSections.quick ? "rotate-180" : ""
+                                }`}
+                              />
+                            </button>
+                            {expandedAssistSections.quick ? (
+                              <div className="mt-3 space-y-3">
+                                {specificationGroups.map((group) => (
+                                  <div key={group.label}>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                      {group.label}
+                                    </p>
+                                    <div className="mt-1.5 flex flex-wrap gap-2">
+                                      {group.suggestions.map((suggestion) => (
+                                        <button
+                                          key={`${group.label}-${suggestion}`}
+                                          type="button"
+                                          onClick={() =>
+                                            appendSpecificationSuggestion(index, suggestion)
+                                          }
+                                          className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-200 hover:bg-blue-100"
+                                        >
+                                          + {suggestion}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
+                            ) : null}
                           </div>
-                        </div>
+                        ) : null}
                       </div>
                       </div>
                       ) : null}

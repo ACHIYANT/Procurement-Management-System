@@ -619,7 +619,8 @@ class TenderService {
     const isSplitCase = caseMode === "tender_split";
     const tenderItems = normalizeTenderItems(payload.tender_items, procurementCase, {
       allowUncappedItems:
-        tenderType === "rate_contract" && rateContractType === "time_only",
+        tenderType === "rate_contract" &&
+        ["framework", "time_only"].includes(rateContractType),
     });
     const caseItems = Array.isArray(procurementCase?.case_items)
       ? procurementCase.case_items
@@ -643,7 +644,7 @@ class TenderService {
 
     if (
       tenderType === "rate_contract" &&
-      ["value_based", "framework", "quantity_value_based"].includes(
+      ["value_based", "quantity_value_based"].includes(
         rateContractType,
       )
     ) {
