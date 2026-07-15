@@ -42,8 +42,8 @@ const parseApiFeedback = async (response, fallbackMessage) => {
 const uniqueNormalizedRoles = (roles = []) =>
   Array.from(new Set((Array.isArray(roles) ? roles : []).map(normalizeRole).filter(Boolean)));
 
-const fetchProcurementEmployeeRoles = async ({ empcode, mobileno } = {}) => {
-  if (!String(empcode || "").trim() || !String(mobileno || "").trim()) return [];
+const fetchProcurementEmployeeProfile = async ({ empcode, mobileno } = {}) => {
+  if (!String(empcode || "").trim() || !String(mobileno || "").trim()) return null;
 
   try {
     const response = await fetch(toProcurementApiUrl("/procurement-employees/activation/validate"), {
@@ -55,12 +55,12 @@ const fetchProcurementEmployeeRoles = async ({ empcode, mobileno } = {}) => {
       body: JSON.stringify({ empcode, mobileno }),
     });
 
-    if (!response.ok) return [];
+    if (!response.ok) return null;
 
     const payload = await response.json();
-    return uniqueNormalizedRoles(payload?.data?.employee?.assigned_roles || []);
+    return payload?.data?.employee || null;
   } catch {
-    return [];
+    return null;
   }
 };
 
@@ -126,10 +126,11 @@ export default function Login() {
 
       if (data.success && data.data) {
         const authRoles = Array.isArray(data?.data?.roles) ? data.data.roles : [];
-        const employeeRoles = await fetchProcurementEmployeeRoles({
+        const procurementEmployee = await fetchProcurementEmployeeProfile({
           empcode: data.data.empcode,
           mobileno: data.data.mobileno,
         });
+        const employeeRoles = uniqueNormalizedRoles(procurementEmployee?.assigned_roles || []);
         const roles = uniqueNormalizedRoles([...authRoles, ...employeeRoles]);
 
         localStorage.setItem("fullname", data.data.fullName || "");
@@ -140,9 +141,13 @@ export default function Login() {
             empcode: data.data.empcode || "",
             fullname: data.data.fullName || "",
             mobileno: data.data.mobileno || "",
-            designation: data.data.designation || "",
-            division: data.data.division || "",
-            location_scope: data.data.location_scope || "",
+            id: procurementEmployee?.id || "",
+            employee_id: procurementEmployee?.id || "",
+            procurement_employee_id: procurementEmployee?.id || "",
+            employee_name: procurementEmployee?.employee_name || data.data.fullName || "",
+            designation: procurementEmployee?.designation || data.data.designation || "",
+            division: procurementEmployee?.division || data.data.division || "",
+            location_scope: procurementEmployee?.location_scope || data.data.location_scope || "",
             roles,
           }),
         );

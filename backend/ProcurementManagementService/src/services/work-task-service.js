@@ -109,6 +109,8 @@ const displayNameFromActor = (actor = {}) =>
   normalizeNullableText(actor.fullname) ||
   null;
 
+const normalizeDigits = (value) => String(value || "").replace(/\D/g, "").trim();
+
 const normalizeRepeatRule = (value) => {
   const repeatRule = toSnake(value, "");
   if (!repeatRule) return null;
@@ -306,6 +308,49 @@ class WorkTaskService {
     this.repository = new WorkTaskRepository();
   }
 
+  async resolveActorIdentity(actor = {}) {
+    const actorEmployeeId = actor.employee_id ? asId(actor.employee_id, "Actor employee id") : null;
+    const actorEmpcode = normalizeNullableText(actor.empcode || actor.emp_code);
+    const actorMobileNo = normalizeDigits(actor.mobile_no || actor.mobileno);
+    const actorName = displayNameFromActor(actor);
+
+    let employee = null;
+    if (actorEmployeeId) {
+      employee = await ProcurementEmployee.findByPk(actorEmployeeId);
+    }
+    if (!employee && actorEmpcode && actorMobileNo) {
+      employee = await ProcurementEmployee.findOne({
+        where: { empcode: actorEmpcode, mobile_no: actorMobileNo, is_active: true },
+      });
+    }
+    if (!employee && actorEmpcode) {
+      employee = await ProcurementEmployee.findOne({
+        where: { empcode: actorEmpcode, is_active: true },
+      });
+    }
+    if (!employee && actorMobileNo) {
+      employee = await ProcurementEmployee.findOne({
+        where: { mobile_no: actorMobileNo, is_active: true },
+      });
+    }
+    if (!employee && actorName) {
+      employee = await ProcurementEmployee.findOne({
+        where: { employee_name: actorName, is_active: true },
+      });
+    }
+
+    if (!employee) return actor;
+
+    return {
+      ...actor,
+      employee_id: employee.id,
+      empcode: employee.empcode,
+      mobile_no: employee.mobile_no,
+      name: employee.employee_name || actorName,
+      employee_name: employee.employee_name || actor.employee_name,
+    };
+  }
+
   normalizeTaskPayload(payload = {}, actor = {}) {
     const originType = toSnake(payload.origin_type, "self");
     if (!ORIGIN_TYPES.has(originType)) {
@@ -487,8 +532,9 @@ class WorkTaskService {
   }
 
   async createTask(payload = {}, actor = {}) {
-    const taskPayload = this.normalizeTaskPayload(payload, actor);
-    const assignees = this.normalizeAssignees(payload, actor);
+    const resolvedActor = await this.resolveActorIdentity(actor);
+    const taskPayload = this.normalizeTaskPayload(payload, resolvedActor);
+    const assignees = this.normalizeAssignees(payload, resolvedActor);
 
     return sequelize.transaction(async (transaction) => {
       const task = await this.repository.createTask(taskPayload, transaction);
@@ -544,11 +590,18 @@ class WorkTaskService {
     const participantEmployeeId = query.employee_id
       ? asId(query.employee_id, "Employee id")
       : null;
+    const participantEmployee = participantEmployeeId
+      ? await ProcurementEmployee.findByPk(participantEmployeeId)
+      : null;
+    const participantName =
+      participantEmployee?.employee_name ||
+      normalizeNullableText(query.employee_name || query.participant_name);
 
     return this.repository.listTasks({
       where,
       assigneeEmployeeId,
       participantEmployeeId,
+      participantName,
       from: toDateOrNull(query.from, "From date"),
       to: toDateOrNull(query.to, "To date"),
       limit: Number(query.limit || 300),

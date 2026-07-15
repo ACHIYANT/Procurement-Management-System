@@ -31,6 +31,18 @@ const resolveActor = (req) => ({
     : req.headers["x-employee-id"]
       ? Number(req.headers["x-employee-id"])
       : null,
+  empcode:
+    req.body?.actor_empcode ||
+    req.body?.actor_emp_code ||
+    req.headers["x-employee-code"] ||
+    req.headers["x-empcode"] ||
+    null,
+  mobile_no:
+    req.body?.actor_mobile_no ||
+    req.body?.actor_mobileno ||
+    req.headers["x-employee-mobile"] ||
+    req.headers["x-mobile-no"] ||
+    null,
   name:
     req.body?.actor_name ||
     req.headers["x-user-name"] ||

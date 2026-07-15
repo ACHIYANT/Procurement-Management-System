@@ -101,7 +101,7 @@ function PmsBrandHeader() {
             </span>
             <span className="pms-govt-wordmark" aria-hidden="true">
               <span>Haryana State Electronics</span>
-              <span>Development Corporation Limited,</span>
+              <span>Development Corporation Limited</span>
               <span>(A State Government Undertaking)</span>
             </span>
           </span>

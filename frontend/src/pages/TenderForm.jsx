@@ -98,12 +98,15 @@ const rateContractTypeOptions = [
 
 const isTenderValueBasedRc = (form = {}) =>
   form.tender_type === "rate_contract" &&
-  ["value_based", "quantity_value_based", "framework"].includes(
+  ["value_based", "quantity_value_based"].includes(
     form.rate_contract_type,
   );
 
 const isTenderUncappedRc = (form = {}) =>
   form.tender_type === "rate_contract" && form.rate_contract_type === "time_only";
+
+const isTenderFrameworkRc = (form = {}) =>
+  form.tender_type === "rate_contract" && form.rate_contract_type === "framework";
 
 const caseModeToTenderMode = {
   tender_gem: "gem",
@@ -398,6 +401,7 @@ export default function TenderForm() {
         (item) =>
           item.selected !== false &&
           (isTenderUncappedRc(form) ||
+            isTenderFrameworkRc(form) ||
             Number(item.tender_quantity || 0) > 0 ||
             Number(item.tender_value || 0) > 0),
       )
@@ -675,6 +679,8 @@ export default function TenderForm() {
                     <h2 className="mt-1 text-lg font-semibold tracking-[-0.02em] text-[#1d1d1f]">
                       {isTenderValueBasedRc(form)
                         ? "Mention value for each item covered in this rate contract"
+                        : isTenderFrameworkRc(form)
+                          ? "Select categories and accessories covered by this RC package"
                         : isTenderUncappedRc(form)
                           ? "Select items covered by this validity-only rate contract"
                         : "Mention quantity for each item covered in this tender"}
@@ -683,6 +689,8 @@ export default function TenderForm() {
                       One tender can include multiple procurement-case items.{" "}
                       {isTenderValueBasedRc(form)
                         ? "Quantity is optional here. Enter item-wise value so the RC value is traceable per item."
+                        : isTenderFrameworkRc(form)
+                          ? "No item-wise quantity/value is required for common-package-pool RC. Select the categories, services, or accessories covered here; bidder-wise rates and allocation are captured during commercial and negotiation stages."
                         : isTenderUncappedRc(form)
                           ? "No fixed quantity/value ceiling is required here. Rates will be finalized during commercial/negotiation stages."
                         : "Enter the quantity being tendered against each item."}
@@ -698,7 +706,7 @@ export default function TenderForm() {
                           <th className="px-4 py-3">
                             {isTenderValueBasedRc(form)
                               ? "Tender Value"
-                              : isTenderUncappedRc(form)
+                              : isTenderUncappedRc(form) || isTenderFrameworkRc(form)
                                 ? "Coverage"
                               : "Tender Qty"}
                           </th>
@@ -778,9 +786,11 @@ export default function TenderForm() {
                                     className="max-w-44"
                                     placeholder="Item RC value"
                                   />
-                                ) : isTenderUncappedRc(form) ? (
+                                ) : isTenderUncappedRc(form) || isTenderFrameworkRc(form) ? (
                                   <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                                    Validity-only RC
+                                    {isTenderFrameworkRc(form)
+                                      ? "Covered by RC package"
+                                      : "Validity-only RC"}
                                   </span>
                                 ) : (
                                   <Input
