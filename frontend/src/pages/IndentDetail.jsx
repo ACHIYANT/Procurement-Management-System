@@ -139,7 +139,7 @@ const workflowStatClass =
 const workflowStatLabelClass =
   "text-[10px] font-semibold uppercase tracking-[0.2em] text-black/38";
 const workflowStatValueClass =
-  "mt-1.5 text-[15px] font-semibold leading-5 text-[#1d1d1f]";
+  "mt-1.5 text-[16px] font-semibold leading-6 text-[#1d1d1f]";
 const workflowMetaPillClass =
   "pms-workflow-meta-pill inline-flex items-center gap-1.5 rounded-full bg-[#f5f5f7] px-3 py-1.5 text-xs font-medium text-black/58 ring-1 ring-black/6";
 const actionPanelClass =
@@ -154,6 +154,59 @@ const calculateEstimatedAmount = (item, estimatedRate) => {
   const quantity = Number(item?.quantity || 0);
   if (!rate || !quantity) return "";
   return String(Number((rate * quantity).toFixed(2)));
+};
+
+const parseSpecificationRows = (specification = "") => {
+  const source = String(specification || "").replace(/\s+/g, " ").trim();
+  if (!source) return [];
+
+  const matches = [];
+  const labelPattern = /(^|\s)([A-Z][A-Za-z0-9/&().-]*(?:\s+[A-Z][A-Za-z0-9/&().-]*){0,5}):\s*/g;
+  let match = labelPattern.exec(source);
+
+  while (match) {
+    const label = match[2].trim();
+    if (!/^\d+$/.test(label) && label.length <= 56) {
+      matches.push({
+        label,
+        start: match.index + match[1].length,
+        valueStart: labelPattern.lastIndex,
+      });
+    }
+    match = labelPattern.exec(source);
+  }
+
+  if (matches.length < 2) return [];
+
+  return matches
+    .map((entry, index) => {
+      const next = matches[index + 1];
+      const value = source
+        .slice(entry.valueStart, next ? next.start : source.length)
+        .trim()
+        .replace(/^[,.;-]\s*/, "")
+        .replace(/\s+([,.;])/g, "$1");
+
+      if (!value && next) {
+        return {
+          label: `${entry.label} / ${next.label}`,
+          value: source
+            .slice(next.valueStart, matches[index + 2]?.start || source.length)
+            .trim()
+            .replace(/^[,.;-]\s*/, "")
+            .replace(/\s+([,.;])/g, "$1"),
+          skipNext: true,
+        };
+      }
+
+      return { label: entry.label, value };
+    })
+    .filter((row, index, rows) => {
+      if (!row.value) return false;
+      if (index > 0 && rows[index - 1]?.skipNext) return false;
+      return true;
+    })
+    .map(({ label, value }) => ({ label, value }));
 };
 
 export default function IndentDetail() {
@@ -180,6 +233,8 @@ export default function IndentDetail() {
   );
   const [additionalDocumentsOpen, setAdditionalDocumentsOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [specificationViews, setSpecificationViews] = useState({});
+  const [openSpecifications, setOpenSpecifications] = useState({});
   const [popup, setPopup] = useState({
     open: false,
     type: "info",
@@ -1125,12 +1180,9 @@ export default function IndentDetail() {
                           : "Measure",
                         formatIndentItemPrimaryMeasure(item),
                       ],
-                      [
-                        "Contract Period",
-                        item.procurement_scope_type === "standard_quantity"
-                          ? "NA"
-                          : formatIndentContractPeriod(item) || "NA",
-                      ],
+                      ...(item.procurement_scope_type === "standard_quantity"
+                        ? []
+                        : [["Contract Period", formatIndentContractPeriod(item) || "NA"]]),
                       ["Estimate", compactMoney(item.estimated_amount), money(item.estimated_amount)],
                       [
                         "Admin Approval",
@@ -1169,6 +1221,12 @@ export default function IndentDetail() {
                         item.estimated_by_officer?.employee_name || "Pending",
                       ],
                     ];
+                    const specificationRows = parseSpecificationRows(item.specification);
+                    const specificationView =
+                      specificationViews[itemId] ||
+                      (specificationRows.length >= 2 ? "table" : "traditional");
+                    const canShowSpecificationTable = specificationRows.length >= 2;
+                    const isSpecificationOpen = Boolean(openSpecifications[itemId]);
 
                     return (
                       <div
@@ -1237,14 +1295,99 @@ export default function IndentDetail() {
 
                         {item.specification ? (
                           <div
-                            className={`${isOfficerFocusedView ? "mx-4 mb-3 px-4 py-3" : "mx-5 mb-4 px-4 py-3"} pms-workflow-soft-panel rounded-[22px] bg-[#f5f5f7] ring-1 ring-black/6`}
+                            className={`${isOfficerFocusedView ? "mx-4 mb-3" : "mx-5 mb-4"} pms-workflow-soft-panel overflow-hidden rounded-[22px] bg-[#f5f5f7] ring-1 ring-black/6`}
                           >
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-black/42">
-                              Specification
-                            </p>
-                            <p className="mt-1 text-sm leading-6 text-black/68">
-                              {item.specification}
-                            </p>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenSpecifications((current) => ({
+                                  ...current,
+                                  [itemId]: !current[itemId],
+                                }))
+                              }
+                              className="flex w-full flex-col gap-3 px-4 py-3 text-left transition hover:bg-black/[0.025] sm:flex-row sm:items-center sm:justify-between"
+                              aria-expanded={isSpecificationOpen}
+                            >
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-black/42">
+                                  Specification
+                                </p>
+                                <p className="mt-1 text-xs text-black/45">
+                                  {isSpecificationOpen
+                                    ? "Hide specification details."
+                                    : canShowSpecificationTable
+                                      ? `${specificationRows.length} parsed details available.`
+                                      : "Open original specification text."}
+                                </p>
+                              </div>
+                              <span className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#1d1d1f] shadow-sm ring-1 ring-black/8">
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform ${isSpecificationOpen ? "rotate-180" : ""}`}
+                                />
+                                {isSpecificationOpen ? "Close" : "Open"}
+                              </span>
+                            </button>
+
+                            {isSpecificationOpen ? (
+                              <div className="border-t border-black/6 px-4 py-3">
+                                <div className="flex justify-end">
+                                  <div className="inline-flex w-fit rounded-full bg-white p-1 shadow-sm ring-1 ring-black/8">
+                                    {["traditional", "table"].map((view) => {
+                                      const disabled = view === "table" && !canShowSpecificationTable;
+                                      const active = specificationView === view;
+                                      return (
+                                        <button
+                                          key={view}
+                                          type="button"
+                                          disabled={disabled}
+                                          onClick={() =>
+                                            setSpecificationViews((current) => ({
+                                              ...current,
+                                              [itemId]: view,
+                                            }))
+                                          }
+                                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                            active
+                                              ? "bg-[#0071e3] text-white shadow-sm"
+                                              : "text-black/55 hover:bg-black/5"
+                                          } ${disabled ? "cursor-not-allowed opacity-40 hover:bg-transparent" : ""}`}
+                                        >
+                                          {view === "table" ? "Table" : "Traditional"}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                {specificationView === "table" && canShowSpecificationTable ? (
+                                  <div className="mt-3 overflow-hidden rounded-[18px] bg-white ring-1 ring-black/8">
+                                    <div className="grid grid-cols-[minmax(130px,0.35fr)_1fr] bg-black/[0.035] text-[10px] font-semibold uppercase tracking-[0.16em] text-black/42">
+                                      <div className="border-r border-black/8 px-3 py-2.5">Detail</div>
+                                      <div className="px-3 py-2.5">Specification</div>
+                                    </div>
+                                    <div className="divide-y divide-black/6">
+                                      {specificationRows.map((row, rowIndex) => (
+                                        <div
+                                          key={`${row.label}-${rowIndex}`}
+                                          className="grid grid-cols-[minmax(130px,0.35fr)_1fr] text-sm"
+                                        >
+                                          <div className="border-r border-black/6 px-3 py-2.5 font-semibold text-[#1d1d1f]">
+                                            {row.label}
+                                          </div>
+                                          <div className="px-3 py-2.5 leading-6 text-black/68">
+                                            {row.value}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="mt-3 text-sm leading-6 text-black/68">
+                                    {item.specification}
+                                  </p>
+                                )}
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
 
