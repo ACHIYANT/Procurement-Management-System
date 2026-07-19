@@ -264,8 +264,17 @@ const isSameMinute = (first, second) => {
   return Math.floor(first.getTime() / 60000) === Math.floor(second.getTime() / 60000);
 };
 
-const getReminderOccurrenceEntityId = (taskId, occurrenceAt) =>
-  `${taskId}:${occurrenceAt.toISOString()}`;
+const isRollingReminderFrequency = (frequency) => {
+  const intervalMs = REMINDER_FREQUENCY_INTERVAL_MS[frequency];
+  return Boolean(intervalMs && intervalMs < SHORT_REMINDER_OCCURRENCE_THRESHOLD_MS);
+};
+
+const getReminderOccurrenceEntityId = (task, occurrenceAt) => {
+  if (isRollingReminderFrequency(task.reminder_frequency || "once")) {
+    return `${task.id}:rolling`;
+  }
+  return `${task.id}:${occurrenceAt.toISOString()}`;
+};
 
 const getNextReminderOccurrence = ({ reminderAt, dueAt, intervalMs, now = new Date() }) => {
   if (!intervalMs || !reminderAt) return null;
@@ -330,7 +339,6 @@ class WorkTaskService {
     const actorEmployeeId = actor.employee_id ? asId(actor.employee_id, "Actor employee id") : null;
     const actorEmpcode = normalizeNullableText(actor.empcode || actor.emp_code);
     const actorMobileNo = normalizeDigits(actor.mobile_no || actor.mobileno);
-    const actorName = displayNameFromActor(actor);
 
     let employee = null;
     if (actorEmployeeId) {
@@ -351,11 +359,6 @@ class WorkTaskService {
         where: { mobile_no: actorMobileNo, is_active: true },
       });
     }
-    if (!employee && actorName) {
-      employee = await ProcurementEmployee.findOne({
-        where: { employee_name: actorName, is_active: true },
-      });
-    }
 
     if (!employee) return actor;
 
@@ -364,7 +367,7 @@ class WorkTaskService {
       employee_id: employee.id,
       empcode: employee.empcode,
       mobile_no: employee.mobile_no,
-      name: employee.employee_name || actorName,
+      name: employee.employee_name || displayNameFromActor(actor),
       employee_name: employee.employee_name || actor.employee_name,
     };
   }
@@ -526,7 +529,7 @@ class WorkTaskService {
 
     const occurrences = buildReminderOccurrences(task);
     const desiredEntityIds = new Set(
-      occurrences.map((occurrenceAt) => getReminderOccurrenceEntityId(task.id, occurrenceAt)),
+      occurrences.map((occurrenceAt) => getReminderOccurrenceEntityId(task, occurrenceAt)),
     );
     const existingOccurrences = await this.repository.findReminderOccurrenceTasks(task.id, transaction);
 
@@ -562,7 +565,7 @@ class WorkTaskService {
     }
 
     for (const occurrenceAt of occurrences) {
-      const entityId = getReminderOccurrenceEntityId(task.id, occurrenceAt);
+      const entityId = getReminderOccurrenceEntityId(task, occurrenceAt);
       const assignees = await this.resolveReminderAssignees(task);
 
       await this.createOrUpdateSystemTask(
@@ -670,18 +673,10 @@ class WorkTaskService {
     const participantEmployeeId = query.employee_id
       ? asId(query.employee_id, "Employee id")
       : null;
-    const participantEmployee = participantEmployeeId
-      ? await ProcurementEmployee.findByPk(participantEmployeeId)
-      : null;
-    const participantName =
-      participantEmployee?.employee_name ||
-      normalizeNullableText(query.employee_name || query.participant_name);
-
     return this.repository.listTasks({
       where,
       assigneeEmployeeId,
       participantEmployeeId,
-      participantName,
       from: toDateOrNull(query.from, "From date"),
       to: toDateOrNull(query.to, "To date"),
       limit: Number(query.limit || 300),

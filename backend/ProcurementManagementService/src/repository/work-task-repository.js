@@ -40,14 +40,12 @@ class WorkTaskRepository {
     where = {},
     assigneeEmployeeId = null,
     participantEmployeeId = null,
-    participantName = null,
     from = null,
     to = null,
     limit = 300,
   } = {}) {
     const taskWhere = { ...where };
     const participantId = participantEmployeeId ? Number(participantEmployeeId) : null;
-    const participantLabel = String(participantName || "").trim();
 
     if (from || to) {
       taskWhere.due_at = {};
@@ -55,28 +53,18 @@ class WorkTaskRepository {
       if (to) taskWhere.due_at[Op.lte] = to;
     }
 
-    if (participantId || participantLabel) {
-      const participantPredicates = [];
-      if (participantId) {
-        participantPredicates.push(
-          { created_by_employee_id: participantId },
-          { assigned_by_employee_id: participantId },
-          { completed_by_employee_id: participantId },
-          { returned_by_employee_id: participantId },
-          { "$assignees.assigned_to_employee_id$": participantId },
-        );
-      }
-      if (participantLabel) {
-        participantPredicates.push(
-          { created_by_name: participantLabel },
-          { assigned_by_name: participantLabel },
-          { "$assignees.assigned_to_name$": participantLabel },
-        );
-      }
-
+    if (participantId) {
       taskWhere[Op.and] = [
         ...(Array.isArray(taskWhere[Op.and]) ? taskWhere[Op.and] : []),
-        { [Op.or]: participantPredicates },
+        {
+          [Op.or]: [
+            { created_by_employee_id: participantId },
+            { assigned_by_employee_id: participantId },
+            { completed_by_employee_id: participantId },
+            { returned_by_employee_id: participantId },
+            { "$assignees.assigned_to_employee_id$": participantId },
+          ],
+        },
       ];
     }
 

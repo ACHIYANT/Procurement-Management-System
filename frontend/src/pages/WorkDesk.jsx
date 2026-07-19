@@ -1487,6 +1487,9 @@ function WorkloadTaskBucket({ title, rows, tone = "slate", emptyText }) {
   );
 }
 
+const getProfileProcurementEmployeeId = (profile = {}) =>
+  profile?.employee_id || profile?.procurement_employee_id || null;
+
 export default function WorkDesk() {
   const [roles] = useState(() => getCurrentUserRoles());
   const [profile] = useState(() => getCurrentUserProfile());
@@ -1510,7 +1513,7 @@ export default function WorkDesk() {
     const currentRoles = getCurrentUserRoles();
     const canViewAll =
       currentRoles.includes(PMS_ROLES.ADMIN) || currentRoles.includes(PMS_ROLES.SUPER_ADMIN);
-    return !currentProfile?.employee_id && !currentProfile?.id && canViewAll ? "all" : "mine";
+    return !getProfileProcurementEmployeeId(currentProfile) && canViewAll ? "all" : "mine";
   });
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
@@ -1533,11 +1536,7 @@ export default function WorkDesk() {
 
   const actorPayload = useMemo(
     () => ({
-      actor_employee_id:
-        profile?.employee_id ||
-        profile?.procurement_employee_id ||
-        profile?.id ||
-        null,
+      actor_employee_id: getProfileProcurementEmployeeId(profile),
       actor_empcode: profile?.empcode || getBrowserStorageValue("empcode") || "",
       actor_mobile_no:
         profile?.mobile_no ||
@@ -1573,30 +1572,22 @@ export default function WorkDesk() {
       });
       const shouldLoadAllTasks = canViewAllTasks && scope === "all";
       const shouldLoadAllCompletedTasks = isCompletedFilter && shouldLoadAllTasks && !isCompletedByMeFilter;
-      const actorName = String(actorPayload.actor_name || "").trim();
       const shouldLoadOwnTasks = isCompletedFilter
-        ? Boolean(currentEmployeeId || actorName)
-        : !shouldLoadAllTasks && (currentEmployeeId || actorName);
+        ? Boolean(currentEmployeeId)
+        : !shouldLoadAllTasks && Boolean(currentEmployeeId);
       const shouldLoadNoTasks = isCompletedFilter
-        ? !shouldLoadAllCompletedTasks && !currentEmployeeId && !actorName
-        : !shouldLoadAllTasks && !currentEmployeeId && !actorName;
+        ? !shouldLoadAllCompletedTasks && !currentEmployeeId
+        : !shouldLoadAllTasks && !currentEmployeeId;
 
       if (isCompletedByMeFilter && currentEmployeeId) {
         params.set("completed_by_employee_id", currentEmployeeId);
       } else if (shouldLoadOwnTasks) {
-        if (currentEmployeeId) {
-          params.set("employee_id", currentEmployeeId);
-        } else {
-          params.set("employee_name", actorName);
-        }
+        params.set("employee_id", currentEmployeeId);
       }
 
       const taskRequest = (() => {
         if (shouldLoadNoTasks) return Promise.resolve([]);
         if (!isCompletedFilter || shouldLoadAllCompletedTasks) {
-          return procurementRequest(`/work-tasks?${params.toString()}`);
-        }
-        if (!currentEmployeeId && actorName) {
           return procurementRequest(`/work-tasks?${params.toString()}`);
         }
 
