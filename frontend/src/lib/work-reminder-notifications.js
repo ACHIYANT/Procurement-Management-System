@@ -169,6 +169,14 @@ export const markReminderShown = (storageKey) => {
   }
 };
 
+const waitForServiceWorkerReady = () =>
+  Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((resolve) => {
+      window.setTimeout(() => resolve(null), 1200);
+    }),
+  ]);
+
 export const showWorkReminderNotification = async (task) => {
   const title = task.title || "Work reminder";
   const body = `Due ${formatReminderDateTime(task.due_at)}. ${
@@ -188,7 +196,7 @@ export const showWorkReminderNotification = async (task) => {
   };
 
   if ("serviceWorker" in navigator) {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await waitForServiceWorkerReady();
     if (registration?.showNotification) {
       await registration.showNotification(title, options);
       return;
@@ -207,11 +215,15 @@ export const runDueWorkReminderNotifications = async (tasks = []) => {
     if (!task?.reminder_at || ["completed", "cancelled"].includes(task.status)) continue;
     const storageKey = getReminderNotificationKey(task, now);
     if (!storageKey || wasReminderAlreadyShown(storageKey)) continue;
-    markReminderShown(storageKey);
     try {
       await showWorkReminderNotification(task);
+      markReminderShown(storageKey);
       if (task.reminder_sound !== "silent") {
-        playReminderSound(task.reminder_sound, task.title);
+        try {
+          playReminderSound(task.reminder_sound, task.title);
+        } catch {
+          // Browsers can block audio in background tabs; keep notification reminders enabled.
+        }
       }
     } catch {
       setWorkReminderStorage(false);
