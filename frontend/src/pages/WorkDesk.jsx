@@ -32,6 +32,7 @@ import { PMS_ROLES, getCurrentUserProfile, getCurrentUserRoles } from "@/lib/rol
 import {
   areWorkRemindersEnabled,
   playReminderSound,
+  requestGlobalWorkReminderRefresh,
   runDueWorkReminderNotifications,
   setWorkReminderStorage,
 } from "@/lib/work-reminder-notifications";
@@ -1893,6 +1894,7 @@ export default function WorkDesk() {
       setIsTaskFormOpen(false);
       setPopup({ open: true, type: "success", message: "Task created successfully." });
       await loadData();
+      requestGlobalWorkReminderRefresh();
     } catch (error) {
       setPopup({ open: true, type: "error", message: error.message || "Unable to create task." });
     } finally {
@@ -1996,6 +1998,7 @@ export default function WorkDesk() {
       setEditForm(emptyForm);
       setPopup({ open: true, type: "success", message: "Task updated successfully." });
       await loadData();
+      requestGlobalWorkReminderRefresh();
     } catch (error) {
       setPopup({ open: true, type: "error", message: error.message || "Unable to update task." });
     } finally {
@@ -2034,6 +2037,7 @@ export default function WorkDesk() {
       });
       setPopup({ open: true, type: "success", message: "Reminder updated successfully." });
       await loadData();
+      requestGlobalWorkReminderRefresh();
     } catch (error) {
       setPopup({ open: true, type: "error", message: error.message || "Unable to update reminder." });
     } finally {
@@ -2079,6 +2083,7 @@ export default function WorkDesk() {
       setQuickText("");
       setPopup({ open: true, type: "success", message: "Quick task added." });
       await loadData();
+      requestGlobalWorkReminderRefresh();
     } catch (error) {
       setPopup({ open: true, type: "error", message: error.message || "Unable to create quick task." });
     } finally {
@@ -2866,6 +2871,9 @@ export default function WorkDesk() {
                     className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                   >
                     <option value="soft_bell">Soft bell</option>
+                    <option value="chime">Chime</option>
+                    <option value="double_ping">Double ping</option>
+                    <option value="digital_alarm">Digital alarm</option>
                     <option value="urgent_alert">Urgent alert</option>
                     <option value="voice_alert">Voice alert</option>
                     <option value="silent">Silent</option>
@@ -3169,6 +3177,9 @@ export default function WorkDesk() {
                     className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                   >
                     <option value="soft_bell">Soft bell</option>
+                    <option value="chime">Chime</option>
+                    <option value="double_ping">Double ping</option>
+                    <option value="digital_alarm">Digital alarm</option>
                     <option value="urgent_alert">Urgent alert</option>
                     <option value="voice_alert">Voice alert</option>
                     <option value="silent">Silent</option>
@@ -3339,6 +3350,9 @@ export default function WorkDesk() {
                     className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                   >
                     <option value="soft_bell">Soft bell</option>
+                    <option value="chime">Chime</option>
+                    <option value="double_ping">Double ping</option>
+                    <option value="digital_alarm">Digital alarm</option>
                     <option value="urgent_alert">Urgent alert</option>
                     <option value="voice_alert">Voice alert</option>
                     <option value="silent">Silent</option>

@@ -1,4 +1,5 @@
 const REMINDER_ENABLED_KEY = "pms_work_reminders_enabled";
+export const WORK_REMINDER_REFRESH_EVENT = "pms-work-reminders-refresh";
 
 const pad = (value) => String(value).padStart(2, "0");
 
@@ -44,6 +45,14 @@ export const setWorkReminderStorage = (enabled) => {
   }
 };
 
+export const requestGlobalWorkReminderRefresh = () => {
+  try {
+    window.dispatchEvent(new CustomEvent(WORK_REMINDER_REFRESH_EVENT));
+  } catch {
+    // A refresh request is only a convenience signal for the global reminder monitor.
+  }
+};
+
 const playToneSequence = (context, notes) => {
   notes.forEach(({ frequency, start, duration, gain = 0.34, type = "triangle" }) => {
     const oscillator = context.createOscillator();
@@ -77,18 +86,37 @@ export const playReminderSound = (sound = "soft_bell", message = "") => {
     return;
   }
   const context = new AudioContext();
+  const soundPatterns = {
+    chime: [
+      { frequency: 523, start: 0, duration: 0.18, gain: 0.28 },
+      { frequency: 784, start: 0.18, duration: 0.22, gain: 0.34 },
+      { frequency: 1047, start: 0.42, duration: 0.42, gain: 0.26 },
+    ],
+    double_ping: [
+      { frequency: 1047, start: 0, duration: 0.12, gain: 0.4, type: "sine" },
+      { frequency: 1047, start: 0.22, duration: 0.14, gain: 0.42, type: "sine" },
+    ],
+    digital_alarm: [
+      { frequency: 880, start: 0, duration: 0.16, gain: 0.44, type: "square" },
+      { frequency: 660, start: 0.2, duration: 0.16, gain: 0.42, type: "square" },
+      { frequency: 880, start: 0.4, duration: 0.16, gain: 0.44, type: "square" },
+      { frequency: 660, start: 0.6, duration: 0.2, gain: 0.42, type: "square" },
+    ],
+    soft_bell: [
+      { frequency: 659, start: 0, duration: 0.2, gain: 0.3 },
+      { frequency: 880, start: 0.22, duration: 0.24, gain: 0.36 },
+      { frequency: 1175, start: 0.5, duration: 0.34, gain: 0.32 },
+    ],
+    urgent_alert: [
+      { frequency: 740, start: 0, duration: 0.22, gain: 0.42, type: "square" },
+      { frequency: 988, start: 0.26, duration: 0.24, gain: 0.46, type: "square" },
+      { frequency: 740, start: 0.56, duration: 0.28, gain: 0.42, type: "square" },
+    ],
+  };
   const notes =
-    sound === "urgent_alert" || sound === "voice_alert"
-      ? [
-          { frequency: 740, start: 0, duration: 0.22, gain: 0.42, type: "square" },
-          { frequency: 988, start: 0.26, duration: 0.24, gain: 0.46, type: "square" },
-          { frequency: 740, start: 0.56, duration: 0.28, gain: 0.42, type: "square" },
-        ]
-      : [
-          { frequency: 659, start: 0, duration: 0.2, gain: 0.3 },
-          { frequency: 880, start: 0.22, duration: 0.24, gain: 0.36 },
-          { frequency: 1175, start: 0.5, duration: 0.34, gain: 0.32 },
-        ];
+    sound === "voice_alert"
+      ? soundPatterns.urgent_alert
+      : soundPatterns[sound] || soundPatterns.soft_bell;
 
   playToneSequence(context, notes);
   window.setTimeout(() => context.close().catch(() => {}), 1400);
