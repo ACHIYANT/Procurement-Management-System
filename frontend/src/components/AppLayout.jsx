@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Outlet } from "react-router-dom";
 import { Lightbulb, LightbulbOff, LogOut } from "lucide-react";
 
@@ -7,6 +7,7 @@ import { toAuthApiUrl } from "@/lib/api-config";
 import { procurementRequest } from "@/lib/procurement-api";
 import { getCurrentUserProfile } from "@/lib/roles";
 import {
+  WORK_REMINDER_REFRESH_EVENT,
   areWorkRemindersEnabled,
   runDueWorkReminderNotifications,
 } from "@/lib/work-reminder-notifications";
@@ -140,9 +141,24 @@ const getCurrentProcurementEmployeeId = () => {
 };
 
 function GlobalWorkReminderMonitor() {
+  const workerRef = useRef(null);
+
   useEffect(() => {
     let cancelled = false;
     let inFlight = false;
+    let worker = null;
+
+    if ("Worker" in window) {
+      worker = new Worker("/pms-work-reminder-worker.js");
+      workerRef.current = worker;
+      worker.addEventListener("message", (event) => {
+        const message = event.data || {};
+        if (message.type === "due-reminders") {
+          runDueWorkReminderNotifications(Array.isArray(message.tasks) ? message.tasks : []);
+        }
+      });
+      worker.postMessage({ type: "set-enabled", enabled: areWorkRemindersEnabled() });
+    }
 
     const pollReminders = async () => {
       if (cancelled || inFlight || !areWorkRemindersEnabled()) return;
@@ -158,7 +174,13 @@ function GlobalWorkReminderMonitor() {
         });
         const tasks = await procurementRequest(`/work-tasks?${params.toString()}`);
         if (!cancelled) {
-          await runDueWorkReminderNotifications(Array.isArray(tasks) ? tasks : []);
+          const taskRows = Array.isArray(tasks) ? tasks : [];
+          worker?.postMessage({
+            type: "sync-reminders",
+            enabled: areWorkRemindersEnabled(),
+            tasks: taskRows,
+          });
+          await runDueWorkReminderNotifications(taskRows);
         }
       } catch {
         // Reminder polling must never interrupt the active page workflow.
@@ -168,6 +190,7 @@ function GlobalWorkReminderMonitor() {
     };
 
     const handleVisibilityOrSettingChange = () => {
+      worker?.postMessage({ type: "set-enabled", enabled: areWorkRemindersEnabled() });
       pollReminders();
     };
 
@@ -175,6 +198,7 @@ function GlobalWorkReminderMonitor() {
     const interval = window.setInterval(pollReminders, 60 * 1000);
     window.addEventListener("focus", handleVisibilityOrSettingChange);
     window.addEventListener("pms-work-reminder-setting-changed", handleVisibilityOrSettingChange);
+    window.addEventListener(WORK_REMINDER_REFRESH_EVENT, handleVisibilityOrSettingChange);
     document.addEventListener("visibilitychange", handleVisibilityOrSettingChange);
 
     return () => {
@@ -182,7 +206,10 @@ function GlobalWorkReminderMonitor() {
       window.clearInterval(interval);
       window.removeEventListener("focus", handleVisibilityOrSettingChange);
       window.removeEventListener("pms-work-reminder-setting-changed", handleVisibilityOrSettingChange);
+      window.removeEventListener(WORK_REMINDER_REFRESH_EVENT, handleVisibilityOrSettingChange);
       document.removeEventListener("visibilitychange", handleVisibilityOrSettingChange);
+      worker?.terminate();
+      workerRef.current = null;
     };
   }, []);
 
