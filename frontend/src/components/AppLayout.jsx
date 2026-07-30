@@ -4,6 +4,12 @@ import { Lightbulb, LightbulbOff, LogOut } from "lucide-react";
 
 import PmsSidebar from "@/components/PmsSidebar";
 import { toAuthApiUrl } from "@/lib/api-config";
+import { procurementRequest } from "@/lib/procurement-api";
+import { getCurrentUserProfile } from "@/lib/roles";
+import {
+  areWorkRemindersEnabled,
+  runDueWorkReminderNotifications,
+} from "@/lib/work-reminder-notifications";
 import govtLogo from "/govt.svg";
 import hartronLogo from "/logo.svg";
 
@@ -128,9 +134,65 @@ function PmsBrandHeader() {
   );
 }
 
+const getCurrentProcurementEmployeeId = () => {
+  const profile = getCurrentUserProfile();
+  return profile?.employee_id || profile?.procurement_employee_id || null;
+};
+
+function GlobalWorkReminderMonitor() {
+  useEffect(() => {
+    let cancelled = false;
+    let inFlight = false;
+
+    const pollReminders = async () => {
+      if (cancelled || inFlight || !areWorkRemindersEnabled()) return;
+      const employeeId = getCurrentProcurementEmployeeId();
+      if (!employeeId) return;
+
+      inFlight = true;
+      try {
+        const params = new URLSearchParams({
+          status: "active",
+          limit: "500",
+          employee_id: employeeId,
+        });
+        const tasks = await procurementRequest(`/work-tasks?${params.toString()}`);
+        if (!cancelled) {
+          await runDueWorkReminderNotifications(Array.isArray(tasks) ? tasks : []);
+        }
+      } catch {
+        // Reminder polling must never interrupt the active page workflow.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const handleVisibilityOrSettingChange = () => {
+      pollReminders();
+    };
+
+    pollReminders();
+    const interval = window.setInterval(pollReminders, 60 * 1000);
+    window.addEventListener("focus", handleVisibilityOrSettingChange);
+    window.addEventListener("pms-work-reminder-setting-changed", handleVisibilityOrSettingChange);
+    document.addEventListener("visibilitychange", handleVisibilityOrSettingChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleVisibilityOrSettingChange);
+      window.removeEventListener("pms-work-reminder-setting-changed", handleVisibilityOrSettingChange);
+      document.removeEventListener("visibilitychange", handleVisibilityOrSettingChange);
+    };
+  }, []);
+
+  return null;
+}
+
 export default function AppLayout() {
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-[#f5f5f7]">
+      <GlobalWorkReminderMonitor />
       <PmsBrandHeader />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <PmsSidebar />
