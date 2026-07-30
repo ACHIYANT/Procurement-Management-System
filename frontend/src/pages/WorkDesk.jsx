@@ -29,6 +29,12 @@ import {
   toProcurementFileViewUrl,
 } from "@/lib/procurement-files";
 import { PMS_ROLES, getCurrentUserProfile, getCurrentUserRoles } from "@/lib/roles";
+import {
+  areWorkRemindersEnabled,
+  playReminderSound,
+  runDueWorkReminderNotifications,
+  setWorkReminderStorage,
+} from "@/lib/work-reminder-notifications";
 
 const calendarViewOptions = [
   { value: "day", label: "Day", shortcut: "D" },
@@ -502,45 +508,6 @@ const addDays = (date, days) => {
   return next;
 };
 
-const playReminderSound = () => {
-  const AudioContext = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContext) return;
-  const context = new AudioContext();
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  oscillator.type = "sine";
-  oscillator.frequency.value = 880;
-  gain.gain.setValueAtTime(0.001, context.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.22, context.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.55);
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start();
-  oscillator.stop(context.currentTime + 0.6);
-};
-
-const areWorkRemindersEnabled = () => {
-  if (typeof window === "undefined" || !("Notification" in window)) return false;
-  try {
-    return localStorage.getItem("pms_work_reminders_enabled") === "true"
-      && Notification.permission === "granted";
-  } catch {
-    return false;
-  }
-};
-
-const setWorkReminderStorage = (enabled) => {
-  try {
-    if (enabled) {
-      localStorage.setItem("pms_work_reminders_enabled", "true");
-    } else {
-      localStorage.removeItem("pms_work_reminders_enabled");
-    }
-  } catch {
-    // Storage can be unavailable in restricted browser modes; UI state still controls this session.
-  }
-};
-
 const getBrowserStorageValue = (key) => {
   if (typeof window === "undefined") return null;
   try {
@@ -552,49 +519,6 @@ const getBrowserStorageValue = (key) => {
 
 const getFirstAvailableValue = (...values) =>
   values.find((value) => String(value || "").trim()) || "";
-
-const wasReminderAlreadyShown = (storageKey) => {
-  try {
-    return Boolean(localStorage.getItem(storageKey));
-  } catch {
-    return false;
-  }
-};
-
-const markReminderShown = (storageKey) => {
-  try {
-    localStorage.setItem(storageKey, "shown");
-  } catch {
-    // Failing to persist duplicate suppression should not break reminders.
-  }
-};
-
-const getReminderFrequencyMs = (frequency) => {
-  if (frequency === "every_15_minutes") return 15 * 60 * 1000;
-  if (frequency === "hourly") return 60 * 60 * 1000;
-  if (frequency === "every_2_hours") return 2 * 60 * 60 * 1000;
-  if (frequency === "every_6_hours") return 6 * 60 * 60 * 1000;
-  if (frequency === "every_12_hours") return 12 * 60 * 60 * 1000;
-  if (frequency === "every_5_days") return 5 * 24 * 60 * 60 * 1000;
-  if (frequency === "daily") return 24 * 60 * 60 * 1000;
-  if (frequency === "weekly") return 7 * 24 * 60 * 60 * 1000;
-  return null;
-};
-
-const getReminderNotificationKey = (task, nowMs) => {
-  if (!task?.reminder_at) return null;
-  const reminderAt = new Date(task.reminder_at).getTime();
-  if (Number.isNaN(reminderAt) || reminderAt > nowMs) return null;
-
-  const frequency = task.reminder_frequency || "once";
-  const intervalMs = getReminderFrequencyMs(frequency);
-  if (!intervalMs) {
-    return `pms_work_reminder_${task.id}_${task.reminder_at}_once`;
-  }
-
-  const slot = Math.floor((nowMs - reminderAt) / intervalMs);
-  return `pms_work_reminder_${task.id}_${task.reminder_at}_${frequency}_${slot}`;
-};
 
 const getSmartTaskAction = (task) => {
   if (!task?.linked_url) return null;
@@ -1558,6 +1482,7 @@ export default function WorkDesk() {
   const currentEmployeeId = actorPayload.actor_employee_id;
   const canViewAllTasks =
     roles.includes(PMS_ROLES.ADMIN) || roles.includes(PMS_ROLES.SUPER_ADMIN);
+  const canAssignTasks = canViewAllTasks;
   const isWorkLocked = !notificationsEnabled;
 
   const loadData = useCallback(async ({ silent = false, notifyOnError = !silent } = {}) => {
@@ -1843,27 +1768,8 @@ export default function WorkDesk() {
   );
 
   useEffect(() => {
-    if (!notificationsEnabled || typeof window === "undefined" || !("Notification" in window)) return;
-    if (Notification.permission !== "granted") return;
-
-    const now = Date.now();
-    tasks.forEach((task) => {
-      if (!task.reminder_at || ["completed", "cancelled"].includes(task.status)) return;
-      const storageKey = getReminderNotificationKey(task, now);
-      if (!storageKey) return;
-      if (wasReminderAlreadyShown(storageKey)) return;
-      markReminderShown(storageKey);
-      try {
-        new Notification(task.title, {
-          body: `Due ${formatDateTime(task.due_at)}. ${task.linked_reference || "Open My Work for details."}`,
-        });
-        if (task.reminder_sound !== "silent") {
-          playReminderSound();
-        }
-      } catch {
-        setWorkReminderStorage(false);
-      }
-    });
+    if (!notificationsEnabled) return;
+    runDueWorkReminderNotifications(tasks);
   }, [notificationsEnabled, tasks]);
 
   const currentLinkOptions = useMemo(() => {
@@ -1953,19 +1859,22 @@ export default function WorkDesk() {
 
     setSaving(true);
     try {
+      const requestedAssigneeId = canAssignTasks
+        ? form.assigned_to_employee_id
+        : currentEmployeeId;
       const assignedEmployee = employees.find(
-        (employee) => String(employee.id) === String(form.assigned_to_employee_id),
+        (employee) => String(employee.id) === String(requestedAssigneeId),
       );
       const assignedToSelf =
-        !form.assigned_to_employee_id ||
-        String(form.assigned_to_employee_id) === String(currentEmployeeId || "");
+        !requestedAssigneeId ||
+        String(requestedAssigneeId) === String(currentEmployeeId || "");
 
       await postProcurement("/work-tasks", {
         ...form,
         ...actorPayload,
         origin_type: assignedToSelf ? "self" : "manual_assignment",
         origin_label: assignedToSelf ? "Self Created" : "Assigned by Higher Authority",
-        assigned_to_employee_id: form.assigned_to_employee_id || currentEmployeeId,
+        assigned_to_employee_id: requestedAssigneeId || currentEmployeeId,
         assigned_to_name: assignedEmployee ? getEmployeeName(assignedEmployee) : actorPayload.actor_name,
         due_at: form.due_at || null,
         reminder_at: form.reminder_at || null,
@@ -2958,6 +2867,7 @@ export default function WorkDesk() {
                   >
                     <option value="soft_bell">Soft bell</option>
                     <option value="urgent_alert">Urgent alert</option>
+                    <option value="voice_alert">Voice alert</option>
                     <option value="silent">Silent</option>
                   </select>
                 </label>
@@ -3006,21 +2916,28 @@ export default function WorkDesk() {
                 </select>
               </label>
 
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-black/70">Assign to</span>
-                <select
-                  value={form.assigned_to_employee_id}
-                  onChange={updateForm("assigned_to_employee_id")}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">Myself</option>
-                  {employees.map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {getEmployeeName(employee)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {canAssignTasks ? (
+                <label className="space-y-1.5">
+                  <span className="text-sm font-medium text-black/70">Assign to</span>
+                  <select
+                    value={form.assigned_to_employee_id}
+                    onChange={updateForm("assigned_to_employee_id")}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Myself</option>
+                    {employees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {getEmployeeName(employee)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="rounded-2xl border border-sky-100 bg-sky-50/70 px-4 py-3 text-sm text-slate-700">
+                  <span className="block font-semibold text-slate-900">Assigned to you</span>
+                  Officers can create personal tasks for themselves. Admin and Super Admin can assign tasks to others.
+                </div>
+              )}
 
               <label className="space-y-1.5">
                 <span className="text-sm font-medium text-black/70">Checklist items</span>
@@ -3253,6 +3170,7 @@ export default function WorkDesk() {
                   >
                     <option value="soft_bell">Soft bell</option>
                     <option value="urgent_alert">Urgent alert</option>
+                    <option value="voice_alert">Voice alert</option>
                     <option value="silent">Silent</option>
                   </select>
                 </label>
@@ -3422,6 +3340,7 @@ export default function WorkDesk() {
                   >
                     <option value="soft_bell">Soft bell</option>
                     <option value="urgent_alert">Urgent alert</option>
+                    <option value="voice_alert">Voice alert</option>
                     <option value="silent">Silent</option>
                   </select>
                 </label>
