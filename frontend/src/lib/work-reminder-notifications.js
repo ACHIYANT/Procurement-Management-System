@@ -1,0 +1,195 @@
+const REMINDER_ENABLED_KEY = "pms_work_reminders_enabled";
+
+const pad = (value) => String(value).padStart(2, "0");
+
+const formatReminderDateTime = (value) => {
+  if (!value) return "No due date";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "No due date";
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+export const areWorkRemindersEnabled = () => {
+  if (typeof window === "undefined" || !("Notification" in window)) return false;
+  try {
+    return (
+      localStorage.getItem(REMINDER_ENABLED_KEY) === "true" &&
+      Notification.permission === "granted"
+    );
+  } catch {
+    return false;
+  }
+};
+
+export const setWorkReminderStorage = (enabled) => {
+  try {
+    if (enabled) {
+      localStorage.setItem(REMINDER_ENABLED_KEY, "true");
+    } else {
+      localStorage.removeItem(REMINDER_ENABLED_KEY);
+    }
+    window.dispatchEvent(
+      new CustomEvent("pms-work-reminder-setting-changed", {
+        detail: { enabled },
+      }),
+    );
+  } catch {
+    // Storage can be unavailable in restricted browser modes; UI state still controls this session.
+  }
+};
+
+const playToneSequence = (context, notes) => {
+  notes.forEach(({ frequency, start, duration, gain = 0.34, type = "triangle" }) => {
+    const oscillator = context.createOscillator();
+    const volume = context.createGain();
+    oscillator.type = type;
+    oscillator.frequency.value = frequency;
+    volume.gain.setValueAtTime(0.001, context.currentTime + start);
+    volume.gain.exponentialRampToValueAtTime(gain, context.currentTime + start + 0.025);
+    volume.gain.exponentialRampToValueAtTime(0.001, context.currentTime + start + duration);
+    oscillator.connect(volume);
+    volume.connect(context.destination);
+    oscillator.start(context.currentTime + start);
+    oscillator.stop(context.currentTime + start + duration + 0.03);
+  });
+};
+
+const speakReminderTitle = (message) => {
+  if (!message || !("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(`Reminder. ${message}`);
+  utterance.rate = 0.95;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+  window.speechSynthesis.speak(utterance);
+};
+
+export const playReminderSound = (sound = "soft_bell", message = "") => {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) {
+    if (sound === "voice_alert") speakReminderTitle(message);
+    return;
+  }
+  const context = new AudioContext();
+  const notes =
+    sound === "urgent_alert" || sound === "voice_alert"
+      ? [
+          { frequency: 740, start: 0, duration: 0.22, gain: 0.42, type: "square" },
+          { frequency: 988, start: 0.26, duration: 0.24, gain: 0.46, type: "square" },
+          { frequency: 740, start: 0.56, duration: 0.28, gain: 0.42, type: "square" },
+        ]
+      : [
+          { frequency: 659, start: 0, duration: 0.2, gain: 0.3 },
+          { frequency: 880, start: 0.22, duration: 0.24, gain: 0.36 },
+          { frequency: 1175, start: 0.5, duration: 0.34, gain: 0.32 },
+        ];
+
+  playToneSequence(context, notes);
+  window.setTimeout(() => context.close().catch(() => {}), 1400);
+
+  if (sound === "voice_alert") {
+    window.setTimeout(() => speakReminderTitle(message), 900);
+  }
+};
+
+export const getReminderFrequencyMs = (frequency) => {
+  if (frequency === "every_15_minutes") return 15 * 60 * 1000;
+  if (frequency === "hourly") return 60 * 60 * 1000;
+  if (frequency === "every_2_hours") return 2 * 60 * 60 * 1000;
+  if (frequency === "every_6_hours") return 6 * 60 * 60 * 1000;
+  if (frequency === "every_12_hours") return 12 * 60 * 60 * 1000;
+  if (frequency === "every_5_days") return 5 * 24 * 60 * 60 * 1000;
+  if (frequency === "daily") return 24 * 60 * 60 * 1000;
+  if (frequency === "weekly") return 7 * 24 * 60 * 60 * 1000;
+  return null;
+};
+
+export const getReminderNotificationKey = (task, nowMs) => {
+  if (!task?.reminder_at) return null;
+  const reminderAt = new Date(task.reminder_at).getTime();
+  if (Number.isNaN(reminderAt) || reminderAt > nowMs) return null;
+
+  const frequency = task.reminder_frequency || "once";
+  const intervalMs = getReminderFrequencyMs(frequency);
+  if (!intervalMs) {
+    return `pms_work_reminder_${task.id}_${task.reminder_at}_once`;
+  }
+
+  const slot = Math.floor((nowMs - reminderAt) / intervalMs);
+  return `pms_work_reminder_${task.id}_${task.reminder_at}_${frequency}_${slot}`;
+};
+
+export const wasReminderAlreadyShown = (storageKey) => {
+  try {
+    return Boolean(localStorage.getItem(storageKey));
+  } catch {
+    return false;
+  }
+};
+
+export const markReminderShown = (storageKey) => {
+  try {
+    localStorage.setItem(storageKey, "shown");
+  } catch {
+    // Failing to persist duplicate suppression should not break reminders.
+  }
+};
+
+export const showWorkReminderNotification = async (task) => {
+  const title = task.title || "Work reminder";
+  const body = `Due ${formatReminderDateTime(task.due_at)}. ${
+    task.linked_reference || "Open My Work for details."
+  }`;
+  const data = {
+    taskId: task.id,
+    url: task.linked_url || "/my-work",
+  };
+  const options = {
+    body,
+    tag: `pms-work-task-${task.id}`,
+    renotify: true,
+    data,
+    icon: "/favicon.svg",
+    badge: "/favicon.svg",
+  };
+
+  if ("serviceWorker" in navigator) {
+    const registration = await navigator.serviceWorker.ready;
+    if (registration?.showNotification) {
+      await registration.showNotification(title, options);
+      return;
+    }
+  }
+
+  new Notification(title, options);
+};
+
+export const runDueWorkReminderNotifications = async (tasks = []) => {
+  if (typeof window === "undefined" || !("Notification" in window)) return;
+  if (!areWorkRemindersEnabled()) return;
+
+  const now = Date.now();
+  for (const task of tasks) {
+    if (!task?.reminder_at || ["completed", "cancelled"].includes(task.status)) continue;
+    const storageKey = getReminderNotificationKey(task, now);
+    if (!storageKey || wasReminderAlreadyShown(storageKey)) continue;
+    markReminderShown(storageKey);
+    try {
+      await showWorkReminderNotification(task);
+      if (task.reminder_sound !== "silent") {
+        playReminderSound(task.reminder_sound, task.title);
+      }
+    } catch {
+      setWorkReminderStorage(false);
+    }
+  }
+};
+
+export const getLocalDateTimeValue = (date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
