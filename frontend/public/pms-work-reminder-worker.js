@@ -1,5 +1,7 @@
 let reminderTasks = [];
 let remindersEnabled = false;
+let reminderApiUrl = null;
+let fetchInFlight = false;
 
 const getReminderFrequencyMs = (frequency) => {
   if (frequency === "every_15_minutes") return 15 * 60 * 1000;
@@ -40,8 +42,36 @@ const tick = () => {
   self.postMessage({ type: "due-reminders", tasks: dueTasks });
 };
 
+const fetchLatestReminders = async () => {
+  if (!remindersEnabled || !reminderApiUrl || fetchInFlight) return;
+
+  fetchInFlight = true;
+  try {
+    const response = await fetch(reminderApiUrl, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload?.success !== false && Array.isArray(payload?.data)) {
+      reminderTasks = payload.data;
+      tick();
+    }
+  } catch {
+    // Background reminder refresh is best-effort; the page poll remains as fallback.
+  } finally {
+    fetchInFlight = false;
+  }
+};
+
 self.addEventListener("message", (event) => {
   const message = event.data || {};
+  if (message.type === "configure") {
+    remindersEnabled = Boolean(message.enabled);
+    reminderApiUrl = message.apiUrl || null;
+    fetchLatestReminders();
+    tick();
+  }
+
   if (message.type === "sync-reminders") {
     reminderTasks = Array.isArray(message.tasks) ? message.tasks : [];
     remindersEnabled = Boolean(message.enabled);
@@ -54,4 +84,7 @@ self.addEventListener("message", (event) => {
   }
 });
 
-self.setInterval(tick, 15 * 1000);
+self.setInterval(() => {
+  fetchLatestReminders();
+  tick();
+}, 15 * 1000);

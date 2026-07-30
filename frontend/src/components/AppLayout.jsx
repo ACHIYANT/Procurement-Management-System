@@ -3,7 +3,7 @@ import { Link, Outlet } from "react-router-dom";
 import { Lightbulb, LightbulbOff, LogOut } from "lucide-react";
 
 import PmsSidebar from "@/components/PmsSidebar";
-import { toAuthApiUrl } from "@/lib/api-config";
+import { toAuthApiUrl, toProcurementApiUrl } from "@/lib/api-config";
 import { procurementRequest } from "@/lib/procurement-api";
 import { getCurrentUserProfile } from "@/lib/roles";
 import {
@@ -148,6 +148,26 @@ function GlobalWorkReminderMonitor() {
     let inFlight = false;
     let worker = null;
 
+    const buildReminderApiUrl = () => {
+      const employeeId = getCurrentProcurementEmployeeId();
+      if (!employeeId) return null;
+      const params = new URLSearchParams({
+        status: "active",
+        limit: "500",
+        employee_id: employeeId,
+      });
+      return toProcurementApiUrl(`/work-tasks?${params.toString()}`);
+    };
+
+    const configureWorker = () => {
+      const apiUrl = buildReminderApiUrl();
+      worker?.postMessage({
+        type: "configure",
+        enabled: areWorkRemindersEnabled() && Boolean(apiUrl),
+        apiUrl,
+      });
+    };
+
     if ("Worker" in window) {
       worker = new Worker("/pms-work-reminder-worker.js");
       workerRef.current = worker;
@@ -157,7 +177,7 @@ function GlobalWorkReminderMonitor() {
           runDueWorkReminderNotifications(Array.isArray(message.tasks) ? message.tasks : []);
         }
       });
-      worker.postMessage({ type: "set-enabled", enabled: areWorkRemindersEnabled() });
+      configureWorker();
     }
 
     const pollReminders = async () => {
@@ -190,7 +210,7 @@ function GlobalWorkReminderMonitor() {
     };
 
     const handleVisibilityOrSettingChange = () => {
-      worker?.postMessage({ type: "set-enabled", enabled: areWorkRemindersEnabled() });
+      configureWorker();
       pollReminders();
     };
 
