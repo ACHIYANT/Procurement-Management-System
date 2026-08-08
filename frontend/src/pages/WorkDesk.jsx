@@ -36,6 +36,7 @@ import {
   requestGlobalWorkReminderRefresh,
   runDueWorkReminderNotifications,
   setWorkReminderStorage,
+  showWorkReminderNotification,
 } from "@/lib/work-reminder-notifications";
 
 const calendarViewOptions = [
@@ -2116,6 +2117,16 @@ export default function WorkDesk() {
       setWorkReminderStorage(true);
       setNotificationsEnabled(true);
       const pushResult = await ensureWorkPushSubscription({ employeeId: currentEmployeeId });
+      await showWorkReminderNotification({
+        id: "permission-test",
+        title: "PMS reminders enabled",
+        due_at: new Date().toISOString(),
+        linked_reference: "You will receive native notification cards for due reminders.",
+        linked_url: "/my-work",
+        priority: "medium",
+        severity: "normal",
+        reminder_sound: "silent",
+      });
       try {
         playReminderSound();
       } catch {

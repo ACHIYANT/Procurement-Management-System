@@ -92,9 +92,14 @@ const getReminderAssigneeIds = (task = {}) => {
 const buildPushPayload = (task) =>
   JSON.stringify({
     title: task.title || "Work reminder",
+    description: task.description || "",
     body: `Due reminder${task.due_at ? ` for ${new Date(task.due_at).toLocaleString("en-IN")}` : ""}.`,
     url: task.linked_url || "/my-work",
     taskId: task.id,
+    dueAt: task.due_at || null,
+    reminderAt: task.reminder_at || null,
+    priority: task.priority || "medium",
+    severity: task.severity || "normal",
     reminderSound: task.reminder_sound || "soft_bell",
     linkedReference: task.linked_reference || null,
   });

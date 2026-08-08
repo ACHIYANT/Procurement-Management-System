@@ -2,6 +2,7 @@ import { procurementRequest, postProcurement } from "@/lib/procurement-api";
 
 const REMINDER_ENABLED_KEY = "pms_work_reminders_enabled";
 export const WORK_REMINDER_REFRESH_EVENT = "pms-work-reminders-refresh";
+export const WORK_REMINDER_DELIVERED_EVENT = "pms-work-reminder-delivered";
 
 const pad = (value) => String(value).padStart(2, "0");
 
@@ -52,6 +53,28 @@ export const requestGlobalWorkReminderRefresh = () => {
     window.dispatchEvent(new CustomEvent(WORK_REMINDER_REFRESH_EVENT));
   } catch {
     // A refresh request is only a convenience signal for the global reminder monitor.
+  }
+};
+
+const emitWorkReminderDelivered = (task) => {
+  try {
+    window.dispatchEvent(
+      new CustomEvent(WORK_REMINDER_DELIVERED_EVENT, {
+        detail: {
+          id: task.id,
+          title: task.title || "Work reminder",
+          description: task.description || "",
+          due_at: task.due_at || null,
+          reminder_at: task.reminder_at || null,
+          priority: task.priority || "medium",
+          severity: task.severity || "normal",
+          linked_reference: task.linked_reference || "",
+          linked_url: task.linked_url || "/my-work",
+        },
+      }),
+    );
+  } catch {
+    // The browser notification remains the source of truth if the in-app card cannot be emitted.
   }
 };
 
@@ -231,20 +254,35 @@ export const showWorkReminderNotification = async (task) => {
     body,
     tag: `pms-work-task-${task.id}`,
     renotify: true,
+    requireInteraction: task.priority === "critical" || task.severity === "critical",
+    silent: task.reminder_sound === "silent",
+    timestamp: Date.now(),
+    vibrate: [180, 90, 180],
     data,
     icon: "/favicon.svg",
     badge: "/favicon.svg",
   };
 
+  let serviceWorkerError = null;
   if ("serviceWorker" in navigator) {
-    const registration = await waitForServiceWorkerReady();
-    if (registration?.showNotification) {
-      await registration.showNotification(title, options);
-      return;
+    try {
+      const registration = await waitForServiceWorkerReady();
+      if (registration?.showNotification) {
+        await registration.showNotification(title, options);
+        return;
+      }
+    } catch (error) {
+      serviceWorkerError = error;
     }
   }
 
-  new Notification(title, options);
+  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+    new Notification(title, options);
+    return;
+  }
+
+  if (serviceWorkerError) throw serviceWorkerError;
+  throw new Error("Notification permission is not granted.");
 };
 
 export const runDueWorkReminderNotifications = async (tasks = []) => {
@@ -259,6 +297,7 @@ export const runDueWorkReminderNotifications = async (tasks = []) => {
     try {
       await showWorkReminderNotification(task);
       markReminderShown(storageKey);
+      emitWorkReminderDelivered(task);
       if (task.reminder_sound !== "silent") {
         try {
           playReminderSound(task.reminder_sound, task.title);
