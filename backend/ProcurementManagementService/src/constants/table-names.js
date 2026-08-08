@@ -59,6 +59,8 @@ const WORK_TASK_ASSIGNEE_TABLE = "work_task_assignees";
 const WORK_TASK_COMMENT_TABLE = "work_task_comments";
 const WORK_TASK_ACTIVITY_TABLE = "work_task_activities";
 const WORK_TASK_ATTACHMENT_TABLE = "work_task_attachments";
+const WORK_PUSH_SUBSCRIPTION_TABLE = "work_push_subscriptions";
+const WORK_PUSH_NOTIFICATION_LOG_TABLE = "work_push_notification_logs";
 
 module.exports = {
   PROCUREMENT_EMPLOYEE_TABLE,
@@ -121,4 +123,6 @@ module.exports = {
   WORK_TASK_COMMENT_TABLE,
   WORK_TASK_ACTIVITY_TABLE,
   WORK_TASK_ATTACHMENT_TABLE,
+  WORK_PUSH_SUBSCRIPTION_TABLE,
+  WORK_PUSH_NOTIFICATION_LOG_TABLE,
 };
