@@ -84,7 +84,7 @@ function PmsBrandHeader() {
 
   return (
     <header className="pms-brand-header no-print shrink-0 border-b border-slate-200/70 backdrop-blur-xl print:hidden">
-      <div className="mx-auto flex w-full max-w-[2400px] flex-wrap items-center gap-2 px-2 py-2 sm:px-4 sm:py-3 lg:px-6 min-[1920px]:px-10 min-[2560px]:px-14">
+      <div className="mx-auto flex w-full max-w-600 flex-wrap items-center gap-2 px-2 py-2 sm:px-4 sm:py-3 lg:px-6 min-[1920px]:px-10 min-[2560px]:px-14">
         <Link
           to="/dashboard"
           className="pms-brand-identity flex min-w-0 flex-1 items-center gap-2 sm:gap-3"
@@ -243,7 +243,7 @@ export default function AppLayout() {
       <PmsBrandHeader />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <PmsSidebar />
-        <main className="pms-fancy-scrollbar h-full min-h-0 min-w-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,_#f5f5f7_0%,_#fbfbfd_100%)]">
+        <main className="pms-fancy-scrollbar h-full min-h-0 min-w-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f5f5f7_0%,#fbfbfd_100%)]">
           <Outlet />
         </main>
       </div>
