@@ -31,6 +31,7 @@ import {
 import { PMS_ROLES, getCurrentUserProfile, getCurrentUserRoles } from "@/lib/roles";
 import {
   areWorkRemindersEnabled,
+  ensureWorkPushSubscription,
   playReminderSound,
   requestGlobalWorkReminderRefresh,
   runDueWorkReminderNotifications,
@@ -2114,12 +2115,19 @@ export default function WorkDesk() {
 
       setWorkReminderStorage(true);
       setNotificationsEnabled(true);
+      const pushResult = await ensureWorkPushSubscription({ employeeId: currentEmployeeId });
       try {
         playReminderSound();
       } catch {
         // Sound is optional; notification permission is the actual requirement.
       }
-      setPopup({ open: true, type: "success", message: "Work reminders and sound alerts enabled." });
+      setPopup({
+        open: true,
+        type: "success",
+        message: pushResult.enabled
+          ? "Work reminders, sound alerts, and background push notifications enabled."
+          : "Work reminders enabled. Server push is not configured yet, so fully background reminders may still depend on the browser.",
+      });
     } catch {
       setWorkReminderStorage(false);
       setNotificationsEnabled(false);

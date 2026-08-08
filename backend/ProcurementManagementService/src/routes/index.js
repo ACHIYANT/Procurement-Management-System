@@ -19,6 +19,7 @@ const purchaseOrderRoutes = require("./purchase-order-routes");
 const procurementEmployeeRoutes = require("./procurement-employee-routes");
 const reportRoutes = require("./report-routes");
 const tenderRoutes = require("./tender-routes");
+const workPushRoutes = require("./work-push-routes");
 const workTaskRoutes = require("./work-task-routes");
 
 const router = express.Router();
@@ -54,6 +55,7 @@ router.use("/purchase-orders", purchaseOrderRoutes);
 router.use("/tenders", tenderRoutes);
 router.use("/procurement-employees", procurementEmployeeRoutes);
 router.use("/reports", reportRoutes);
+router.use("/work-push", workPushRoutes);
 router.use("/work-tasks", workTaskRoutes);
 
 module.exports = router;

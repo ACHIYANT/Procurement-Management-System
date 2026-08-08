@@ -1,3 +1,5 @@
+import { procurementRequest, postProcurement } from "@/lib/procurement-api";
+
 const REMINDER_ENABLED_KEY = "pms_work_reminders_enabled";
 export const WORK_REMINDER_REFRESH_EVENT = "pms-work-reminders-refresh";
 
@@ -176,6 +178,45 @@ const waitForServiceWorkerReady = () =>
       window.setTimeout(() => resolve(null), 1200);
     }),
   ]);
+
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = `${base64String}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
+};
+
+export const ensureWorkPushSubscription = async ({ employeeId }) => {
+  if (!employeeId || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return { enabled: false, reason: "unsupported" };
+  }
+
+  const keyConfig = await procurementRequest("/work-push/public-key");
+  if (!keyConfig?.enabled || !keyConfig.publicKey) {
+    return { enabled: false, reason: "server_not_configured" };
+  }
+
+  const registration = await waitForServiceWorkerReady();
+  if (!registration?.pushManager) {
+    return { enabled: false, reason: "service_worker_not_ready" };
+  }
+
+  const existingSubscription = await registration.pushManager.getSubscription();
+  const subscription =
+    existingSubscription ||
+    (await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(keyConfig.publicKey),
+    }));
+
+  await postProcurement("/work-push/subscribe", {
+    employee_id: employeeId,
+    subscription: subscription.toJSON(),
+    user_agent: window.navigator.userAgent,
+  });
+
+  return { enabled: true };
+};
 
 export const showWorkReminderNotification = async (task) => {
   const title = task.title || "Work reminder";
