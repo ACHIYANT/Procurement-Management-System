@@ -26,3 +26,22 @@ self.addEventListener("notificationclick", (event) => {
       }),
   );
 });
+
+self.addEventListener("push", (event) => {
+  const payload = event.data?.json() || {};
+  const title = payload.title || "Work reminder";
+  const options = {
+    body: payload.body || "Open My Work for details.",
+    tag: `pms-work-push-${payload.taskId || Date.now()}`,
+    renotify: true,
+    icon: "/favicon.svg",
+    badge: "/favicon.svg",
+    data: {
+      taskId: payload.taskId || null,
+      url: payload.url || "/my-work",
+      reminderSound: payload.reminderSound || "soft_bell",
+    },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
