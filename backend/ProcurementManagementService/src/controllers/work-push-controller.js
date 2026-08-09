@@ -52,22 +52,7 @@ const unsubscribe = async (req, res) => {
   }
 };
 
-const acknowledge = async (req, res) => {
-  try {
-    const data = await service.acknowledgeReminderDelivery(req.body || {});
-    return res.status(200).json({
-      success: true,
-      message: "Work reminder delivery acknowledged successfully.",
-      data,
-      err: {},
-    });
-  } catch (error) {
-    return sendError(res, error, "Unable to acknowledge work reminder delivery.");
-  }
-};
-
 module.exports = {
-  acknowledge,
   getPublicKey,
   subscribe,
   unsubscribe,

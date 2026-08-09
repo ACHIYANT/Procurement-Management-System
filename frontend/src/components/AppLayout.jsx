@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Outlet } from "react-router-dom";
-import { BellRing, Lightbulb, LightbulbOff, LogOut, X } from "lucide-react";
+import { Lightbulb, LightbulbOff, LogOut } from "lucide-react";
 
 import PmsSidebar from "@/components/PmsSidebar";
 import { toAuthApiUrl, toProcurementApiUrl } from "@/lib/api-config";
 import { procurementRequest } from "@/lib/procurement-api";
 import { getCurrentUserProfile } from "@/lib/roles";
 import {
-  WORK_REMINDER_DELIVERED_EVENT,
   WORK_REMINDER_REFRESH_EVENT,
   areWorkRemindersEnabled,
-  ensureWorkPushSubscription,
   runDueWorkReminderNotifications,
 } from "@/lib/work-reminder-notifications";
 import govtLogo from "/govt.svg";
@@ -142,110 +140,12 @@ const getCurrentProcurementEmployeeId = () => {
   return profile?.employee_id || profile?.procurement_employee_id || null;
 };
 
-const formatFlashDateTime = (value) => {
-  if (!value) return "No due date";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No due date";
-  return date.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-function WorkReminderFlashCard({ reminder, onClose }) {
-  useEffect(() => {
-    if (!reminder) return undefined;
-    const timeout = window.setTimeout(onClose, 18000);
-    return () => window.clearTimeout(timeout);
-  }, [onClose, reminder]);
-
-  if (!reminder) return null;
-
-  const isCritical = reminder.priority === "critical" || reminder.severity === "critical";
-
-  return (
-    <div className="pointer-events-none fixed right-4 top-20 z-[100] w-[min(380px,calc(100vw-2rem))] print:hidden">
-      <div
-        className={`pointer-events-auto overflow-hidden rounded-[28px] border bg-white/94 shadow-[0_28px_80px_-38px_rgba(15,23,42,0.65)] ring-1 ring-white/70 backdrop-blur-2xl pms-dark:bg-[#16171c]/94 pms-dark:ring-white/10 ${
-          isCritical
-            ? "border-rose-200 pms-dark:border-rose-400/35"
-            : "border-sky-200 pms-dark:border-sky-400/35"
-        }`}
-      >
-        <div
-          className={`h-1.5 ${
-            isCritical
-              ? "bg-[linear-gradient(90deg,#ef4444,#fb7185,#f59e0b)]"
-              : "bg-[linear-gradient(90deg,#2563eb,#38bdf8,#22c55e)]"
-          }`}
-        />
-        <div className="flex gap-3 p-4">
-          <span
-            className={`grid h-11 w-11 flex-none place-items-center rounded-2xl ${
-              isCritical
-                ? "bg-rose-50 text-rose-600 ring-1 ring-rose-100 pms-dark:bg-rose-500/14 pms-dark:text-rose-200 pms-dark:ring-rose-300/20"
-                : "bg-sky-50 text-sky-600 ring-1 ring-sky-100 pms-dark:bg-sky-500/14 pms-dark:text-sky-200 pms-dark:ring-sky-300/20"
-            }`}
-          >
-            <BellRing className="h-5 w-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[0.68rem] font-bold uppercase tracking-[0.24em] text-slate-400 pms-dark:text-slate-500">
-              Work Reminder
-            </p>
-            <h3 className="mt-1 line-clamp-2 text-base font-bold text-slate-950 pms-dark:text-white">
-              {reminder.title}
-            </h3>
-            <p className="mt-1 text-sm text-slate-600 pms-dark:text-slate-300">
-              {formatFlashDateTime(reminder.due_at || reminder.reminder_at)}
-              {reminder.linked_reference ? ` • ${reminder.linked_reference}` : ""}
-            </p>
-            {reminder.description ? (
-              <p className="mt-2 line-clamp-2 text-sm text-slate-500 pms-dark:text-slate-400">
-                {reminder.description}
-              </p>
-            ) : null}
-            <div className="mt-4 flex items-center gap-2">
-              <Link
-                to={reminder.linked_url || "/my-work"}
-                onClick={onClose}
-                className="inline-flex items-center rounded-full bg-[#1473e6] px-4 py-2 text-sm font-semibold text-white shadow-[0_14px_30px_-18px_rgba(20,115,230,0.9)] hover:bg-[#0f66d0]"
-              >
-                Open
-              </Link>
-              <button
-                type="button"
-                onClick={onClose}
-                className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 pms-dark:border-white/10 pms-dark:bg-white/6 pms-dark:text-slate-200 pms-dark:hover:bg-white/10"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-          <button
-            type="button"
-            aria-label="Dismiss reminder"
-            onClick={onClose}
-            className="grid h-8 w-8 flex-none place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 pms-dark:hover:bg-white/10 pms-dark:hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function GlobalWorkReminderMonitor({ onReminderDelivered }) {
+function GlobalWorkReminderMonitor() {
   const workerRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
     let inFlight = false;
-    let pushRegistrationInFlight = false;
-    let pushRegistrationDone = false;
     let worker = null;
 
     const buildReminderApiUrl = () => {
@@ -268,39 +168,13 @@ function GlobalWorkReminderMonitor({ onReminderDelivered }) {
       });
     };
 
-    const ensurePushRegistration = async () => {
-      if (
-        cancelled ||
-        pushRegistrationDone ||
-        pushRegistrationInFlight ||
-        !areWorkRemindersEnabled()
-      ) {
-        return;
-      }
-
-      const employeeId = getCurrentProcurementEmployeeId();
-      if (!employeeId) return;
-
-      pushRegistrationInFlight = true;
-      try {
-        const result = await ensureWorkPushSubscription({ employeeId });
-        pushRegistrationDone = Boolean(result?.enabled);
-      } catch {
-        pushRegistrationDone = false;
-      } finally {
-        pushRegistrationInFlight = false;
-      }
-    };
-
     if ("Worker" in window) {
       worker = new Worker("/pms-work-reminder-worker.js");
       workerRef.current = worker;
       worker.addEventListener("message", (event) => {
         const message = event.data || {};
         if (message.type === "due-reminders") {
-          runDueWorkReminderNotifications(Array.isArray(message.tasks) ? message.tasks : [], {
-            employeeId: getCurrentProcurementEmployeeId(),
-          });
+          runDueWorkReminderNotifications(Array.isArray(message.tasks) ? message.tasks : []);
         }
       });
       configureWorker();
@@ -313,7 +187,6 @@ function GlobalWorkReminderMonitor({ onReminderDelivered }) {
 
       inFlight = true;
       try {
-        await ensurePushRegistration();
         const params = new URLSearchParams({
           status: "active",
           limit: "500",
@@ -327,9 +200,7 @@ function GlobalWorkReminderMonitor({ onReminderDelivered }) {
             enabled: areWorkRemindersEnabled(),
             tasks: taskRows,
           });
-          await runDueWorkReminderNotifications(taskRows, {
-            employeeId,
-          });
+          await runDueWorkReminderNotifications(taskRows);
         }
       } catch {
         // Reminder polling must never interrupt the active page workflow.
@@ -340,49 +211,14 @@ function GlobalWorkReminderMonitor({ onReminderDelivered }) {
 
     const handleVisibilityOrSettingChange = () => {
       configureWorker();
-      ensurePushRegistration();
       pollReminders();
     };
 
-    const handleReminderDelivered = (event) => {
-      if (event.detail) onReminderDelivered(event.detail);
-    };
-
-    const handleServiceWorkerMessage = (event) => {
-      const message = event.data || {};
-      if (message.type !== "work-reminder-push" || !message.task) return;
-      const notificationKey = message.task.notification_key || null;
-      let alreadyDelivered = false;
-      if (notificationKey) {
-        try {
-          alreadyDelivered = Boolean(localStorage.getItem(notificationKey));
-          if (!alreadyDelivered) {
-            localStorage.setItem(notificationKey, "shown");
-          }
-        } catch {
-          // If storage is unavailable, still show the in-app card from the push event.
-        }
-      }
-
-      try {
-        event.ports?.[0]?.postMessage({ alreadyDelivered });
-      } catch {
-        // If the service worker cannot receive the claim, it will show the push notification.
-      }
-
-      if (!alreadyDelivered) {
-        onReminderDelivered(message.task);
-      }
-    };
-
-    ensurePushRegistration();
     pollReminders();
     const interval = window.setInterval(pollReminders, 60 * 1000);
     window.addEventListener("focus", handleVisibilityOrSettingChange);
     window.addEventListener("pms-work-reminder-setting-changed", handleVisibilityOrSettingChange);
     window.addEventListener(WORK_REMINDER_REFRESH_EVENT, handleVisibilityOrSettingChange);
-    window.addEventListener(WORK_REMINDER_DELIVERED_EVENT, handleReminderDelivered);
-    navigator.serviceWorker?.addEventListener("message", handleServiceWorkerMessage);
     document.addEventListener("visibilitychange", handleVisibilityOrSettingChange);
 
     return () => {
@@ -391,24 +227,19 @@ function GlobalWorkReminderMonitor({ onReminderDelivered }) {
       window.removeEventListener("focus", handleVisibilityOrSettingChange);
       window.removeEventListener("pms-work-reminder-setting-changed", handleVisibilityOrSettingChange);
       window.removeEventListener(WORK_REMINDER_REFRESH_EVENT, handleVisibilityOrSettingChange);
-      window.removeEventListener(WORK_REMINDER_DELIVERED_EVENT, handleReminderDelivered);
-      navigator.serviceWorker?.removeEventListener("message", handleServiceWorkerMessage);
       document.removeEventListener("visibilitychange", handleVisibilityOrSettingChange);
       worker?.terminate();
       workerRef.current = null;
     };
-  }, [onReminderDelivered]);
+  }, []);
 
   return null;
 }
 
 export default function AppLayout() {
-  const [reminderFlash, setReminderFlash] = useState(null);
-
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-[#f5f5f7]">
-      <GlobalWorkReminderMonitor onReminderDelivered={setReminderFlash} />
-      <WorkReminderFlashCard reminder={reminderFlash} onClose={() => setReminderFlash(null)} />
+      <GlobalWorkReminderMonitor />
       <PmsBrandHeader />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <PmsSidebar />

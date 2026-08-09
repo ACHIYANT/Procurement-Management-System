@@ -89,18 +89,12 @@ const getReminderAssigneeIds = (task = {}) => {
   return Array.from(ids).filter(Boolean);
 };
 
-const buildPushPayload = (task, notificationKey) =>
+const buildPushPayload = (task) =>
   JSON.stringify({
     title: task.title || "Work reminder",
-    description: task.description || "",
     body: `Due reminder${task.due_at ? ` for ${new Date(task.due_at).toLocaleString("en-IN")}` : ""}.`,
     url: task.linked_url || "/my-work",
     taskId: task.id,
-    notificationKey,
-    dueAt: task.due_at || null,
-    reminderAt: task.reminder_at || null,
-    priority: task.priority || "medium",
-    severity: task.severity || "normal",
     reminderSound: task.reminder_sound || "soft_bell",
     linkedReference: task.linked_reference || null,
   });
@@ -155,50 +149,6 @@ class WorkPushService {
     return { removed: updated };
   }
 
-  async acknowledgeReminderDelivery(payload = {}) {
-    const employeeId = asId(payload.employee_id || payload.procurement_employee_id, "Employee id");
-    const taskId = asId(payload.work_task_id || payload.task_id, "Task id");
-    const notificationKey = normalizeNullableText(payload.notification_key);
-    if (!notificationKey) {
-      const error = new Error("Notification key is required.");
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const subscriptions = await WorkPushSubscription.findAll({
-      where: {
-        procurement_employee_id: employeeId,
-        is_active: true,
-      },
-    });
-
-    let acknowledged = 0;
-    for (const subscription of subscriptions) {
-      const [log, created] = await WorkPushNotificationLog.findOrCreate({
-        where: {
-          work_push_subscription_id: subscription.id,
-          notification_key: notificationKey,
-        },
-        defaults: {
-          work_push_subscription_id: subscription.id,
-          work_task_id: taskId,
-          notification_key: notificationKey,
-          sent_at: new Date(),
-        },
-      });
-
-      if (!created && Number(log.work_task_id) !== taskId) {
-        await log.update({
-          work_task_id: taskId,
-          sent_at: new Date(),
-        });
-      }
-      acknowledged += 1;
-    }
-
-    return { acknowledged };
-  }
-
   async sendDueReminderPushes() {
     const result = { configured: isPushConfigured(), scanned: 0, sent: 0, skipped: 0, failed: 0 };
     if (!configureWebPush()) return result;
@@ -238,10 +188,7 @@ class WorkPushService {
         }
 
         try {
-          await webPush.sendNotification(
-            JSON.parse(subscription.subscription_json),
-            buildPushPayload(task, notificationKey),
-          );
+          await webPush.sendNotification(JSON.parse(subscription.subscription_json), buildPushPayload(task));
           await WorkPushNotificationLog.create({
             work_push_subscription_id: subscription.id,
             work_task_id: task.id,

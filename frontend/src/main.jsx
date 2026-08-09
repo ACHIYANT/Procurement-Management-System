@@ -9,12 +9,9 @@ if (localStorage.getItem("pms_dark_mode_enabled") === "true") {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/pms-reminder-sw.js")
-      .then((registration) => registration.update().catch(() => {}))
-      .catch(() => {
-        // Reminder notifications still fall back to normal browser notifications.
-      });
+    navigator.serviceWorker.register("/pms-reminder-sw.js").catch(() => {
+      // Reminder notifications still fall back to normal browser notifications.
+    });
   });
 }
 

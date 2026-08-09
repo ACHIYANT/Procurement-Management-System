@@ -22,8 +22,7 @@ const getReminderNotificationKey = (task, nowMs) => {
 
   const frequency = task.reminder_frequency || "once";
   const intervalMs = getReminderFrequencyMs(frequency);
-  if (!intervalMs)
-    return `pms_work_reminder_${task.id}_${task.reminder_at}_once`;
+  if (!intervalMs) return `pms_work_reminder_${task.id}_${task.reminder_at}_once`;
 
   const slot = Math.floor((nowMs - reminderAt) / intervalMs);
   return `pms_work_reminder_${task.id}_${task.reminder_at}_${frequency}_${slot}`;
@@ -33,10 +32,7 @@ const findDueTasks = () => {
   if (!remindersEnabled) return [];
   const now = Date.now();
   return reminderTasks
-    .filter(
-      (task) =>
-        task?.reminder_at && !["completed", "cancelled"].includes(task.status),
-    )
+    .filter((task) => task?.reminder_at && !["completed", "cancelled"].includes(task.status))
     .filter((task) => Boolean(getReminderNotificationKey(task, now)));
 };
 
@@ -56,11 +52,7 @@ const fetchLatestReminders = async () => {
       headers: { Accept: "application/json" },
     });
     const payload = await response.json().catch(() => ({}));
-    if (
-      response.ok &&
-      payload?.success !== false &&
-      Array.isArray(payload?.data)
-    ) {
+    if (response.ok && payload?.success !== false && Array.isArray(payload?.data)) {
       reminderTasks = payload.data;
       tick();
     }
@@ -95,4 +87,4 @@ self.addEventListener("message", (event) => {
 self.setInterval(() => {
   fetchLatestReminders();
   tick();
-}, 5 * 1000);
+}, 15 * 1000);
