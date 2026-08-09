@@ -113,6 +113,9 @@ const displayNameFromActor = (actor = {}) =>
 
 const normalizeDigits = (value) => String(value || "").replace(/\D/g, "").trim();
 
+const normalizeIdentityName = (value) =>
+  normalizeNullableText(value)?.replace(/\s+/g, " ").toLowerCase() || null;
+
 const normalizeRepeatRule = (value) => {
   const repeatRule = toSnake(value, "");
   if (!repeatRule) return null;
@@ -371,6 +374,8 @@ class WorkTaskService {
     const actorEmployeeId = actor.employee_id ? asId(actor.employee_id, "Actor employee id") : null;
     const actorEmpcode = normalizeNullableText(actor.empcode || actor.emp_code);
     const actorMobileNo = normalizeDigits(actor.mobile_no || actor.mobileno);
+    const actorName = displayNameFromActor(actor);
+    const normalizedActorName = normalizeIdentityName(actorName);
 
     let employee = null;
     if (actorEmployeeId) {
@@ -390,6 +395,23 @@ class WorkTaskService {
       employee = await ProcurementEmployee.findOne({
         where: { mobile_no: actorMobileNo, is_active: true },
       });
+    }
+    if (!employee && normalizedActorName) {
+      const nameMatches = await ProcurementEmployee.findAll({
+        where: {
+          is_active: true,
+          [Op.and]: [
+            sequelize.where(
+              sequelize.fn("LOWER", sequelize.fn("TRIM", sequelize.col("employee_name"))),
+              normalizedActorName,
+            ),
+          ],
+        },
+        limit: 2,
+      });
+      if (nameMatches.length === 1) {
+        employee = nameMatches[0];
+      }
     }
 
     if (!employee) return actor;
