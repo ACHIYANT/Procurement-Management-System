@@ -2,6 +2,7 @@ import { procurementRequest, postProcurement } from "@/lib/procurement-api";
 
 const REMINDER_ENABLED_KEY = "pms_work_reminders_enabled";
 export const WORK_REMINDER_REFRESH_EVENT = "pms-work-reminders-refresh";
+export const WORK_REMINDER_DELIVERED_EVENT = "pms-work-reminder-delivered";
 
 const pad = (value) => String(value).padStart(2, "0");
 
@@ -52,6 +53,28 @@ export const requestGlobalWorkReminderRefresh = () => {
     window.dispatchEvent(new CustomEvent(WORK_REMINDER_REFRESH_EVENT));
   } catch {
     // A refresh request is only a convenience signal for the global reminder monitor.
+  }
+};
+
+const emitWorkReminderDelivered = (task) => {
+  try {
+    window.dispatchEvent(
+      new CustomEvent(WORK_REMINDER_DELIVERED_EVENT, {
+        detail: {
+          id: task.id,
+          title: task.title || "Work reminder",
+          description: task.description || "",
+          due_at: task.due_at || null,
+          reminder_at: task.reminder_at || null,
+          priority: task.priority || "medium",
+          severity: task.severity || "normal",
+          linked_reference: task.linked_reference || "",
+          linked_url: task.linked_url || "/my-work",
+        },
+      }),
+    );
+  } catch {
+    // The browser notification remains the source of truth if the in-app card cannot be emitted.
   }
 };
 
@@ -171,6 +194,19 @@ export const markReminderShown = (storageKey) => {
   }
 };
 
+const acknowledgeWorkPushDelivery = async ({ employeeId, notificationKey, taskId }) => {
+  if (!employeeId || !notificationKey || !taskId || String(taskId) === "permission-test") return;
+  try {
+    await postProcurement("/work-push/acknowledge", {
+      employee_id: employeeId,
+      task_id: taskId,
+      notification_key: notificationKey,
+    });
+  } catch {
+    // Best-effort duplicate suppression; local duplicate protection still applies.
+  }
+};
+
 const waitForServiceWorkerReady = () =>
   Promise.race([
     navigator.serviceWorker.ready,
@@ -231,43 +267,69 @@ export const showWorkReminderNotification = async (task) => {
     body,
     tag: `pms-work-task-${task.id}`,
     renotify: true,
+    requireInteraction: task.priority === "critical" || task.severity === "critical",
+    silent: task.reminder_sound === "silent",
+    timestamp: Date.now(),
     data,
     icon: "/favicon.svg",
     badge: "/favicon.svg",
   };
 
+  if (!options.silent) {
+    options.vibrate = [180, 90, 180];
+  }
+
+  let serviceWorkerError = null;
   if ("serviceWorker" in navigator) {
-    const registration = await waitForServiceWorkerReady();
-    if (registration?.showNotification) {
-      await registration.showNotification(title, options);
-      return;
+    try {
+      const registration = await waitForServiceWorkerReady();
+      if (registration?.showNotification) {
+        await registration.showNotification(title, options);
+        return;
+      }
+    } catch (error) {
+      serviceWorkerError = error;
     }
   }
 
-  new Notification(title, options);
+  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+    new Notification(title, options);
+    return;
+  }
+
+  if (serviceWorkerError) throw serviceWorkerError;
+  throw new Error("Notification permission is not granted.");
 };
 
-export const runDueWorkReminderNotifications = async (tasks = []) => {
+export const runDueWorkReminderNotifications = async (tasks = [], options = {}) => {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (!areWorkRemindersEnabled()) return;
 
   const now = Date.now();
+  const employeeId = options.employeeId || null;
   for (const task of tasks) {
     if (!task?.reminder_at || ["completed", "cancelled"].includes(task.status)) continue;
     const storageKey = getReminderNotificationKey(task, now);
     if (!storageKey || wasReminderAlreadyShown(storageKey)) continue;
     try {
       await showWorkReminderNotification(task);
-      markReminderShown(storageKey);
-      if (task.reminder_sound !== "silent") {
-        try {
-          playReminderSound(task.reminder_sound, task.title);
-        } catch {
-          // Browsers can block audio in background tabs; keep notification reminders enabled.
-        }
-      }
     } catch {
-      setWorkReminderStorage(false);
+      // Native notification cards can be blocked by OS/browser settings. Keep PMS reminders alive.
+    }
+
+    markReminderShown(storageKey);
+    acknowledgeWorkPushDelivery({
+      employeeId,
+      notificationKey: storageKey,
+      taskId: task.id,
+    });
+    emitWorkReminderDelivered(task);
+    if (task.reminder_sound !== "silent") {
+      try {
+        playReminderSound(task.reminder_sound, task.title);
+      } catch {
+        // Browsers can block audio in background tabs; keep notification reminders enabled.
+      }
     }
   }
 };

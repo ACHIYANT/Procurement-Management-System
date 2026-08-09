@@ -7,6 +7,7 @@ const {
   ProcurementEmployee,
   Tender,
   TenderEmdEntry,
+  WorkTask,
   sequelize,
 } = require("../../models");
 const { WorkTaskRepository } = require("../repository/work-task-repository");
@@ -221,6 +222,37 @@ const toDateOnly = (value) => {
 const fromDateOnly = (value, hour = 17) => {
   if (!value) return null;
   const date = new Date(`${value}T${String(hour).padStart(2, "0")}:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const parseTimeParts = (value) => {
+  const text = normalizeNullableText(value);
+  if (!text) return null;
+  const match = text.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (!match) return null;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2] || 0);
+  const meridiem = match[3]?.toUpperCase();
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+
+  if (meridiem) {
+    if (hour < 1 || hour > 12) return null;
+    if (meridiem === "PM" && hour !== 12) hour += 12;
+    if (meridiem === "AM" && hour === 12) hour = 0;
+  } else if (hour > 23) {
+    return null;
+  }
+
+  return { hour, minute };
+};
+
+const fromCommitteeMeetingDateTime = (meeting = {}) => {
+  if (!meeting.meeting_date) return null;
+  const time = parseTimeParts(meeting.meeting_time) || { hour: 10, minute: 0 };
+  const date = new Date(
+    `${meeting.meeting_date}T${String(time.hour).padStart(2, "0")}:${String(time.minute).padStart(2, "0")}:00`,
+  );
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
@@ -1347,6 +1379,7 @@ class WorkTaskService {
 
   async syncSystemTasks() {
     const today = startOfToday();
+    const now = new Date();
     const inThreeDays = endOfDay(addDays(today, 3));
     const inSevenDays = endOfDay(addDays(today, 7));
     const inThirtyDays = endOfDay(addDays(today, 30));
@@ -1362,6 +1395,23 @@ class WorkTaskService {
         if (created) result.created += 1;
         else result.updated += 1;
       };
+
+      const [cancelledStaleCommitteeTasks] = await WorkTask.update(
+        {
+          status: "cancelled",
+          last_activity_at: now,
+        },
+        {
+          where: {
+            origin_type: "system",
+            system_rule_code: "committee_meeting_scheduled",
+            status: { [Op.in]: Array.from(ACTIVE_TASK_STATUSES) },
+            due_at: { [Op.lte]: now },
+          },
+          transaction,
+        },
+      );
+      result.updated += cancelledStaleCommitteeTasks;
 
       const tenderDeadlineRows = await Tender.findAll({
         where: {
@@ -1586,7 +1636,9 @@ class WorkTaskService {
       });
 
       for (const meeting of committeeRows) {
-        const dueAt = fromDateOnly(meeting.meeting_date, 10);
+        const dueAt = fromCommitteeMeetingDateTime(meeting);
+        if (!dueAt || dueAt <= now) continue;
+        const dayBeforeReminderAt = addDays(dueAt, -1);
         await saveSystemTask(
           this.buildSystemTaskPayload({
             title: `Committee meeting scheduled: ${meeting.meeting_no}`,
@@ -1598,7 +1650,7 @@ class WorkTaskService {
             linkedReference: meeting.meeting_no,
             linkedUrl: `/committees/${meeting.id}`,
             dueAt,
-            reminderAt: dueAt ? addDays(dueAt, -1) : null,
+            reminderAt: dayBeforeReminderAt > now ? dayBeforeReminderAt : dueAt,
             priority: "high",
             severity: "urgent",
             assignee: getSystemAssignee(meeting),
