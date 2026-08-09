@@ -197,15 +197,19 @@ export const markReminderShown = (storageKey) => {
 };
 
 const acknowledgeWorkPushDelivery = async ({ employeeId, notificationKey, taskId }) => {
-  if (!employeeId || !notificationKey || !taskId || String(taskId) === "permission-test") return;
+  if (!employeeId || !notificationKey || !taskId || String(taskId) === "permission-test") {
+    return false;
+  }
   try {
     await postProcurement("/work-push/acknowledge", {
       employee_id: employeeId,
       task_id: taskId,
       notification_key: notificationKey,
     });
+    return true;
   } catch {
     // Best-effort duplicate suppression; local duplicate protection still applies.
+    return false;
   }
 };
 
@@ -313,18 +317,19 @@ export const runDueWorkReminderNotifications = async (tasks = [], options = {}) 
     if (!task?.reminder_at || ["completed", "cancelled"].includes(task.status)) continue;
     const storageKey = getReminderNotificationKey(task, now);
     if (!storageKey || wasReminderAlreadyShown(storageKey)) continue;
+    markReminderShown(storageKey);
+    await acknowledgeWorkPushDelivery({
+      employeeId,
+      notificationKey: storageKey,
+      taskId: task.id,
+    });
+
     try {
       await showWorkReminderNotification(task);
     } catch {
       // Native notification cards can be blocked by OS/browser settings. Keep PMS reminders alive.
     }
 
-    markReminderShown(storageKey);
-    acknowledgeWorkPushDelivery({
-      employeeId,
-      notificationKey: storageKey,
-      taskId: task.id,
-    });
     emitWorkReminderDelivered(task);
     if (task.reminder_sound !== "silent") {
       try {
