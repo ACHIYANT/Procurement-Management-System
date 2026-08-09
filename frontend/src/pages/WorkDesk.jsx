@@ -2116,28 +2116,45 @@ export default function WorkDesk() {
 
       setWorkReminderStorage(true);
       setNotificationsEnabled(true);
-      const pushResult = await ensureWorkPushSubscription({ employeeId: currentEmployeeId });
-      await showWorkReminderNotification({
-        id: "permission-test",
-        title: "PMS reminders enabled",
-        due_at: new Date().toISOString(),
-        linked_reference: "You will receive native notification cards for due reminders.",
-        linked_url: "/my-work",
-        priority: "medium",
-        severity: "normal",
-        reminder_sound: "silent",
-      });
+      let pushResult = { enabled: false, reason: "not_checked" };
+      let nativeTestShown = false;
+
+      try {
+        pushResult = await ensureWorkPushSubscription({ employeeId: currentEmployeeId });
+      } catch {
+        pushResult = { enabled: false, reason: "subscription_failed" };
+      }
+
+      try {
+        await showWorkReminderNotification({
+          id: "permission-test",
+          title: "PMS reminders enabled",
+          due_at: new Date().toISOString(),
+          linked_reference: "You will receive native notification cards for due reminders.",
+          linked_url: "/my-work",
+          priority: "medium",
+          severity: "normal",
+          reminder_sound: "soft_bell",
+        });
+        nativeTestShown = true;
+      } catch {
+        nativeTestShown = false;
+      }
+
       try {
         playReminderSound();
       } catch {
         // Sound is optional; notification permission is the actual requirement.
       }
+
       setPopup({
         open: true,
-        type: "success",
-        message: pushResult.enabled
-          ? "Work reminders, sound alerts, and background push notifications enabled."
-          : "Work reminders enabled. Server push is not configured yet, so fully background reminders may still depend on the browser.",
+        type: nativeTestShown ? "success" : "warning",
+        message: nativeTestShown
+          ? pushResult.enabled
+            ? "Work reminders, native notification cards, sound alerts, and background push notifications enabled."
+            : "Work reminders and native notification cards enabled. Server push is not configured yet, so closed-browser reminders may still depend on browser support."
+          : "Work reminders are enabled, but Windows/Chrome did not show the native test card. Please check Windows Notifications, Focus Assist/Do Not Disturb, and Chrome site notification settings.",
       });
     } catch {
       setWorkReminderStorage(false);

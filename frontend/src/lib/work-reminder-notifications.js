@@ -257,11 +257,14 @@ export const showWorkReminderNotification = async (task) => {
     requireInteraction: task.priority === "critical" || task.severity === "critical",
     silent: task.reminder_sound === "silent",
     timestamp: Date.now(),
-    vibrate: [180, 90, 180],
     data,
     icon: "/favicon.svg",
     badge: "/favicon.svg",
   };
+
+  if (!options.silent) {
+    options.vibrate = [180, 90, 180];
+  }
 
   let serviceWorkerError = null;
   if ("serviceWorker" in navigator) {
@@ -296,17 +299,18 @@ export const runDueWorkReminderNotifications = async (tasks = []) => {
     if (!storageKey || wasReminderAlreadyShown(storageKey)) continue;
     try {
       await showWorkReminderNotification(task);
-      markReminderShown(storageKey);
-      emitWorkReminderDelivered(task);
-      if (task.reminder_sound !== "silent") {
-        try {
-          playReminderSound(task.reminder_sound, task.title);
-        } catch {
-          // Browsers can block audio in background tabs; keep notification reminders enabled.
-        }
-      }
     } catch {
-      setWorkReminderStorage(false);
+      // Native notification cards can be blocked by OS/browser settings. Keep PMS reminders alive.
+    }
+
+    markReminderShown(storageKey);
+    emitWorkReminderDelivered(task);
+    if (task.reminder_sound !== "silent") {
+      try {
+        playReminderSound(task.reminder_sound, task.title);
+      } catch {
+        // Browsers can block audio in background tabs; keep notification reminders enabled.
+      }
     }
   }
 };
