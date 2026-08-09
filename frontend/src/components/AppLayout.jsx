@@ -352,15 +352,27 @@ function GlobalWorkReminderMonitor({ onReminderDelivered }) {
       const message = event.data || {};
       if (message.type !== "work-reminder-push" || !message.task) return;
       const notificationKey = message.task.notification_key || null;
+      let alreadyDelivered = false;
       if (notificationKey) {
         try {
-          if (localStorage.getItem(notificationKey)) return;
-          localStorage.setItem(notificationKey, "shown");
+          alreadyDelivered = Boolean(localStorage.getItem(notificationKey));
+          if (!alreadyDelivered) {
+            localStorage.setItem(notificationKey, "shown");
+          }
         } catch {
           // If storage is unavailable, still show the in-app card from the push event.
         }
       }
-      onReminderDelivered(message.task);
+
+      try {
+        event.ports?.[0]?.postMessage({ alreadyDelivered });
+      } catch {
+        // If the service worker cannot receive the claim, it will show the push notification.
+      }
+
+      if (!alreadyDelivered) {
+        onReminderDelivered(message.task);
+      }
     };
 
     ensurePushRegistration();
