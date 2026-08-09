@@ -47,6 +47,16 @@ const configureWebPush = () => {
 const hashEndpoint = (endpoint) =>
   crypto.createHash("sha256").update(String(endpoint || "")).digest("hex");
 
+const getEndpointFingerprint = (endpoint) => hashEndpoint(endpoint).slice(0, 12);
+
+const isPushTraceEnabled = () =>
+  String(process.env.WORK_PUSH_TRACE || "").toLowerCase() === "true";
+
+const tracePush = (message, details = {}) => {
+  if (!isPushTraceEnabled()) return;
+  console.log("[WorkPush]", message, details);
+};
+
 const parseSubscription = (value) => {
   if (!value || typeof value !== "object") {
     const error = new Error("Push subscription is required.");
@@ -202,7 +212,16 @@ class WorkPushService {
   }
 
   async sendDueReminderPushes() {
-    const result = { configured: isPushConfigured(), scanned: 0, sent: 0, skipped: 0, failed: 0 };
+    const result = {
+      configured: isPushConfigured(),
+      scanned: 0,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+      noAssignee: 0,
+      noSubscription: 0,
+      alreadyLogged: 0,
+    };
     if (!configureWebPush()) return result;
 
     const tasks = await this.taskRepository.findActiveReminderSourceTasks();
@@ -217,6 +236,11 @@ class WorkPushService {
       const assigneeIds = getReminderAssigneeIds(task);
       if (!assigneeIds.length) {
         result.skipped += 1;
+        result.noAssignee += 1;
+        tracePush("skipped reminder without assignee", {
+          taskId: task.id,
+          notificationKey,
+        });
         continue;
       }
 
@@ -227,6 +251,17 @@ class WorkPushService {
         },
       });
 
+      if (!subscriptions.length) {
+        result.skipped += 1;
+        result.noSubscription += 1;
+        tracePush("skipped reminder without active subscription", {
+          taskId: task.id,
+          notificationKey,
+          assigneeIds,
+        });
+        continue;
+      }
+
       for (const subscription of subscriptions) {
         const alreadySent = await WorkPushNotificationLog.findOne({
           where: {
@@ -236,13 +271,26 @@ class WorkPushService {
         });
         if (alreadySent) {
           result.skipped += 1;
+          result.alreadyLogged += 1;
+          tracePush("skipped already logged reminder", {
+            taskId: task.id,
+            subscriptionId: subscription.id,
+            endpoint: getEndpointFingerprint(subscription.endpoint),
+            notificationKey,
+          });
           continue;
         }
 
         try {
-          await webPush.sendNotification(
+          const pushResponse = await webPush.sendNotification(
             JSON.parse(subscription.subscription_json),
             buildPushPayload(task, notificationKey),
+            {
+              TTL: 60 * 60,
+              urgency: task.priority === "critical" || task.severity === "critical"
+                ? "high"
+                : "normal",
+            },
           );
           await WorkPushNotificationLog.create({
             work_push_subscription_id: subscription.id,
@@ -251,12 +299,27 @@ class WorkPushService {
             sent_at: new Date(),
           });
           result.sent += 1;
+          tracePush("accepted by push service", {
+            taskId: task.id,
+            subscriptionId: subscription.id,
+            endpoint: getEndpointFingerprint(subscription.endpoint),
+            notificationKey,
+            statusCode: pushResponse?.statusCode || null,
+          });
         } catch (error) {
           result.failed += 1;
           const statusCode = Number(error?.statusCode || error?.status || 0);
           await subscription.update({
             is_active: statusCode === 404 || statusCode === 410 ? false : subscription.is_active,
             last_error: error?.message || "Unable to send push notification.",
+          });
+          tracePush("push delivery failed", {
+            taskId: task.id,
+            subscriptionId: subscription.id,
+            endpoint: getEndpointFingerprint(subscription.endpoint),
+            notificationKey,
+            statusCode,
+            message: error?.message || "Unable to send push notification.",
           });
         }
       }

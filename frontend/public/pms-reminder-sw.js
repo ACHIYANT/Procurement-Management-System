@@ -40,9 +40,10 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Work reminder";
   const isCritical = payload.priority === "critical" || payload.severity === "critical";
   const notificationKey = payload.notificationKey || null;
+  const notificationTag = notificationKey || payload.taskId || Date.now();
   const options = {
     body: payload.body || "Open My Work for details.",
-    tag: `pms-work-push-${payload.taskId || Date.now()}`,
+    tag: `pms-work-push-${notificationTag}`,
     renotify: true,
     requireInteraction: isCritical,
     silent: payload.reminderSound === "silent",
