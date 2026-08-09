@@ -217,9 +217,60 @@ const waitForServiceWorkerReady = () =>
   Promise.race([
     navigator.serviceWorker.ready,
     new Promise((resolve) => {
-      window.setTimeout(() => resolve(null), 1200);
+      window.setTimeout(() => resolve(null), 2500);
     }),
   ]);
+
+const getReminderServiceWorkerRegistration = async () => {
+  if (!("serviceWorker" in navigator)) return null;
+
+  const existingRegistration = await navigator.serviceWorker.getRegistration("/");
+  if (existingRegistration) return existingRegistration;
+
+  try {
+    return await navigator.serviceWorker.register("/pms-reminder-sw.js");
+  } catch {
+    return waitForServiceWorkerReady();
+  }
+};
+
+const getBrowserFamily = () => {
+  const userAgent = window.navigator.userAgent || "";
+  if (/Edg\//.test(userAgent)) return "edge";
+  if (/Firefox\//.test(userAgent)) return "firefox";
+  if (/Safari\//.test(userAgent) && !/Chrome|Chromium|CriOS|Edg\//.test(userAgent)) {
+    return "safari";
+  }
+  if (/Chrome|Chromium|CriOS/.test(userAgent)) return "chromium";
+  return "browser";
+};
+
+const getPushUnavailableReason = () => {
+  if (!window.isSecureContext) return "insecure_context";
+  if (!("serviceWorker" in navigator)) return "service_worker_unsupported";
+  if (!("PushManager" in window)) {
+    return getBrowserFamily() === "safari"
+      ? "safari_push_requires_supported_version_or_installed_app"
+      : "push_manager_unsupported";
+  }
+  return null;
+};
+
+export const getWorkPushStatusMessage = (reason) => {
+  const messages = {
+    insecure_context: "open PMS on HTTPS or localhost",
+    server_not_configured: "server VAPID keys are not configured",
+    service_worker_not_ready: "service worker is not ready yet; reload once and try again",
+    service_worker_unsupported: "this browser does not support service workers here",
+    push_manager_unsupported: "this browser does not support background push here",
+    safari_push_requires_supported_version_or_installed_app:
+      "Safari background push needs a supported Safari/macOS version; on iPhone/iPad it usually works only after adding PMS to Home Screen",
+    missing_employee: "current login profile does not include an employee id",
+    subscription_failed: "push subscription failed",
+    unsupported: "background push is not supported in this browser/session",
+  };
+  return messages[reason] || reason || "browser/server support unavailable";
+};
 
 const urlBase64ToUint8Array = (base64String) => {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -229,8 +280,9 @@ const urlBase64ToUint8Array = (base64String) => {
 };
 
 export const ensureWorkPushSubscription = async ({ employeeId }) => {
-  if (!employeeId || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-    return { enabled: false, reason: "unsupported" };
+  const unavailableReason = getPushUnavailableReason();
+  if (!employeeId || unavailableReason) {
+    return { enabled: false, reason: unavailableReason || "missing_employee" };
   }
 
   const keyConfig = await procurementRequest("/work-push/public-key");
@@ -238,18 +290,35 @@ export const ensureWorkPushSubscription = async ({ employeeId }) => {
     return { enabled: false, reason: "server_not_configured" };
   }
 
-  const registration = await waitForServiceWorkerReady();
+  const registration =
+    (await getReminderServiceWorkerRegistration()) ||
+    (await waitForServiceWorkerReady());
   if (!registration?.pushManager) {
     return { enabled: false, reason: "service_worker_not_ready" };
   }
 
+  const applicationServerKey = urlBase64ToUint8Array(keyConfig.publicKey);
   const existingSubscription = await registration.pushManager.getSubscription();
-  const subscription =
-    existingSubscription ||
-    (await registration.pushManager.subscribe({
+  let subscription = existingSubscription;
+
+  if (existingSubscription) {
+    const options = existingSubscription.options || {};
+    const existingKey = options.applicationServerKey
+      ? Array.from(new Uint8Array(options.applicationServerKey)).join(",")
+      : "";
+    const nextKey = Array.from(applicationServerKey).join(",");
+    if (existingKey && existingKey !== nextKey) {
+      await existingSubscription.unsubscribe().catch(() => {});
+      subscription = null;
+    }
+  }
+
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(keyConfig.publicKey),
-    }));
+      applicationServerKey,
+    });
+  }
 
   await postProcurement("/work-push/subscribe", {
     employee_id: employeeId,
@@ -288,7 +357,9 @@ export const showWorkReminderNotification = async (task) => {
   let serviceWorkerError = null;
   if ("serviceWorker" in navigator) {
     try {
-      const registration = await waitForServiceWorkerReady();
+      const registration =
+        (await getReminderServiceWorkerRegistration()) ||
+        (await waitForServiceWorkerReady());
       if (registration?.showNotification) {
         await registration.showNotification(title, options);
         return;

@@ -32,6 +32,7 @@ import { PMS_ROLES, getCurrentUserProfile, getCurrentUserRoles } from "@/lib/rol
 import {
   areWorkRemindersEnabled,
   ensureWorkPushSubscription,
+  getWorkPushStatusMessage,
   playReminderSound,
   requestGlobalWorkReminderRefresh,
   runDueWorkReminderNotifications,
@@ -53,6 +54,28 @@ const taskViewOptions = [
   { value: "kanban", label: "Kanban" },
   { value: "workload", label: "Workload" },
 ];
+
+const requestNotificationPermission = () =>
+  new Promise((resolve) => {
+    if (Notification.permission === "granted") {
+      resolve("granted");
+      return;
+    }
+
+    let result;
+    try {
+      result = Notification.requestPermission.length
+        ? Notification.requestPermission((permission) => resolve(permission))
+        : Notification.requestPermission();
+    } catch {
+      resolve(Notification.permission);
+      return;
+    }
+
+    if (result?.then) {
+      result.then(resolve).catch(() => resolve(Notification.permission));
+    }
+  });
 
 const taskFilterOptions = [
   { value: "inbox", label: "Inbox" },
@@ -2100,9 +2123,7 @@ export default function WorkDesk() {
     }
 
     try {
-      const permission = Notification.permission === "granted"
-        ? "granted"
-        : await Notification.requestPermission();
+      const permission = await requestNotificationPermission();
       if (permission !== "granted") {
         setWorkReminderStorage(false);
         setNotificationsEnabled(false);
@@ -2121,8 +2142,11 @@ export default function WorkDesk() {
 
       try {
         pushResult = await ensureWorkPushSubscription({ employeeId: currentEmployeeId });
-      } catch {
-        pushResult = { enabled: false, reason: "subscription_failed" };
+      } catch (error) {
+        pushResult = {
+          enabled: false,
+          reason: error?.message || "subscription_failed",
+        };
       }
 
       try {
@@ -2153,8 +2177,8 @@ export default function WorkDesk() {
         message: nativeTestShown
           ? pushResult.enabled
             ? "Work reminders, native notification cards, sound alerts, and background push notifications enabled."
-            : "Work reminders and native notification cards enabled. Server push is not configured yet, so closed-browser reminders may still depend on browser support."
-          : "Work reminders are enabled, but Windows/Chrome did not show the native test card. Please check Windows Notifications, Focus Assist/Do Not Disturb, and Chrome site notification settings.",
+            : `Work reminders and native notification cards enabled. Background push is not active yet: ${getWorkPushStatusMessage(pushResult.reason)}.`
+          : `Work reminders are enabled, but the browser did not show the native test card. Background push status: ${pushResult.enabled ? "enabled" : getWorkPushStatusMessage(pushResult.reason)}. Please check OS notification settings and browser site permissions.`,
       });
     } catch {
       setWorkReminderStorage(false);
