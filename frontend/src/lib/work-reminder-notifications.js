@@ -194,6 +194,19 @@ export const markReminderShown = (storageKey) => {
   }
 };
 
+const acknowledgeWorkPushDelivery = async ({ employeeId, notificationKey, taskId }) => {
+  if (!employeeId || !notificationKey || !taskId || String(taskId) === "permission-test") return;
+  try {
+    await postProcurement("/work-push/acknowledge", {
+      employee_id: employeeId,
+      task_id: taskId,
+      notification_key: notificationKey,
+    });
+  } catch {
+    // Best-effort duplicate suppression; local duplicate protection still applies.
+  }
+};
+
 const waitForServiceWorkerReady = () =>
   Promise.race([
     navigator.serviceWorker.ready,
@@ -288,11 +301,12 @@ export const showWorkReminderNotification = async (task) => {
   throw new Error("Notification permission is not granted.");
 };
 
-export const runDueWorkReminderNotifications = async (tasks = []) => {
+export const runDueWorkReminderNotifications = async (tasks = [], options = {}) => {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (!areWorkRemindersEnabled()) return;
 
   const now = Date.now();
+  const employeeId = options.employeeId || null;
   for (const task of tasks) {
     if (!task?.reminder_at || ["completed", "cancelled"].includes(task.status)) continue;
     const storageKey = getReminderNotificationKey(task, now);
@@ -304,6 +318,11 @@ export const runDueWorkReminderNotifications = async (tasks = []) => {
     }
 
     markReminderShown(storageKey);
+    acknowledgeWorkPushDelivery({
+      employeeId,
+      notificationKey: storageKey,
+      taskId: task.id,
+    });
     emitWorkReminderDelivered(task);
     if (task.reminder_sound !== "silent") {
       try {

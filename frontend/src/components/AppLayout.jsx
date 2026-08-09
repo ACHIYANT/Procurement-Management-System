@@ -298,7 +298,9 @@ function GlobalWorkReminderMonitor({ onReminderDelivered }) {
       worker.addEventListener("message", (event) => {
         const message = event.data || {};
         if (message.type === "due-reminders") {
-          runDueWorkReminderNotifications(Array.isArray(message.tasks) ? message.tasks : []);
+          runDueWorkReminderNotifications(Array.isArray(message.tasks) ? message.tasks : [], {
+            employeeId: getCurrentProcurementEmployeeId(),
+          });
         }
       });
       configureWorker();
@@ -325,7 +327,9 @@ function GlobalWorkReminderMonitor({ onReminderDelivered }) {
             enabled: areWorkRemindersEnabled(),
             tasks: taskRows,
           });
-          await runDueWorkReminderNotifications(taskRows);
+          await runDueWorkReminderNotifications(taskRows, {
+            employeeId,
+          });
         }
       } catch {
         // Reminder polling must never interrupt the active page workflow.
@@ -347,6 +351,15 @@ function GlobalWorkReminderMonitor({ onReminderDelivered }) {
     const handleServiceWorkerMessage = (event) => {
       const message = event.data || {};
       if (message.type !== "work-reminder-push" || !message.task) return;
+      const notificationKey = message.task.notification_key || null;
+      if (notificationKey) {
+        try {
+          if (localStorage.getItem(notificationKey)) return;
+          localStorage.setItem(notificationKey, "shown");
+        } catch {
+          // If storage is unavailable, still show the in-app card from the push event.
+        }
+      }
       onReminderDelivered(message.task);
     };
 

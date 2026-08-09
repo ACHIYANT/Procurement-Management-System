@@ -51,6 +51,7 @@ self.addEventListener("push", (event) => {
     data: {
       taskId: payload.taskId || null,
       url: payload.url || "/my-work",
+      notificationKey: payload.notificationKey || null,
       reminderSound: payload.reminderSound || "soft_bell",
     },
   };
@@ -67,6 +68,7 @@ self.addEventListener("push", (event) => {
           type: "work-reminder-push",
           task: {
             id: payload.taskId || null,
+            notification_key: payload.notificationKey || "",
             title,
             description: payload.description || "",
             due_at: payload.dueAt || null,
