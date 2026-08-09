@@ -1,6 +1,9 @@
 import { procurementRequest, postProcurement } from "@/lib/procurement-api";
 
 const REMINDER_ENABLED_KEY = "pms_work_reminders_enabled";
+const DELIVERED_REMINDER_CACHE = "pms-work-delivered-reminders-v1";
+const DELIVERED_REMINDER_CACHE_KEY = "/__pms-work-delivered-reminders";
+const PMS_NOTIFICATION_ICON = "/pms-logo.png";
 export const WORK_REMINDER_REFRESH_EVENT = "pms-work-reminders-refresh";
 export const WORK_REMINDER_DELIVERED_EVENT = "pms-work-reminder-delivered";
 
@@ -196,6 +199,22 @@ export const markReminderShown = (storageKey) => {
   }
 };
 
+export const syncDeliveredPushReminderKeys = async () => {
+  if (typeof window === "undefined" || !("caches" in window)) return [];
+
+  try {
+    const cache = await caches.open(DELIVERED_REMINDER_CACHE);
+    const response = await cache.match(DELIVERED_REMINDER_CACHE_KEY);
+    if (!response) return [];
+    const payload = await response.json();
+    const keys = Array.isArray(payload?.keys) ? payload.keys.filter(Boolean) : [];
+    keys.forEach(markReminderShown);
+    return keys;
+  } catch {
+    return [];
+  }
+};
+
 const acknowledgeWorkPushDelivery = async ({ employeeId, notificationKey, taskId }) => {
   if (!employeeId || !notificationKey || !taskId || String(taskId) === "permission-test") {
     return false;
@@ -346,8 +365,8 @@ export const showWorkReminderNotification = async (task) => {
     silent: task.reminder_sound === "silent",
     timestamp: Date.now(),
     data,
-    icon: "/favicon.svg",
-    badge: "/favicon.svg",
+    icon: PMS_NOTIFICATION_ICON,
+    badge: PMS_NOTIFICATION_ICON,
   };
 
   if (!options.silent) {
@@ -384,6 +403,7 @@ export const runDueWorkReminderNotifications = async (tasks = [], options = {}) 
 
   const now = Date.now();
   const employeeId = options.employeeId || null;
+  await syncDeliveredPushReminderKeys();
   for (const task of tasks) {
     if (!task?.reminder_at || ["completed", "cancelled"].includes(task.status)) continue;
     const storageKey = getReminderNotificationKey(task, now);
