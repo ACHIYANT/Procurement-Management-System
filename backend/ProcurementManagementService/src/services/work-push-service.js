@@ -101,11 +101,18 @@ const getReminderAssigneeIds = (task = {}) => {
   return Array.from(ids).filter(Boolean);
 };
 
+const getReminderPriorityLabel = (task = {}) => {
+  if (task.severity === "critical" || task.priority === "critical") return "Critical";
+  if (task.priority === "high") return "High";
+  if (task.priority === "low") return "Low";
+  return "Medium";
+};
+
 const buildPushPayload = (task, notificationKey) =>
   JSON.stringify({
     title: task.title || "Work reminder",
     description: task.description || "",
-    body: `Due reminder${task.due_at ? ` for ${new Date(task.due_at).toLocaleString("en-IN")}` : ""}.`,
+    body: `Priority: ${getReminderPriorityLabel(task)}. Due reminder${task.due_at ? ` for ${new Date(task.due_at).toLocaleString("en-IN")}` : ""}.`,
     url: task.linked_url || "/my-work",
     taskId: task.id,
     notificationKey,

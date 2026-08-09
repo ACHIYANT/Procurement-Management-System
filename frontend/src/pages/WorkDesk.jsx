@@ -288,8 +288,28 @@ const getCalendarTitle = (baseDate, view) => {
 const getDateTasks = (tasksByDay, date) => tasksByDay[toDateKey(date)] || [];
 
 const isReminderOccurrenceTask = (task) =>
+  task?.is_calendar_reminder ||
   task?.system_rule_code === "task_reminder_occurrence" ||
   task?.entity_type === "work_task_reminder";
+
+const getCalendarTaskCount = (tasks) =>
+  tasks.filter((task) => !isReminderOccurrenceTask(task)).length;
+
+const buildCalendarReminderEvent = (task, nowMs) => {
+  if (!task?.reminder_at || ["completed", "cancelled"].includes(task.status)) return null;
+  const reminderDate = new Date(task.reminder_at);
+  const reminderAt = reminderDate.getTime();
+  if (Number.isNaN(reminderAt) || reminderAt <= nowMs) return null;
+
+  return {
+    ...task,
+    id: `${task.id}-calendar-reminder-${reminderDate.toISOString()}`,
+    title: `Reminder: ${task.title || "Work task"}`,
+    due_at: task.reminder_at,
+    is_calendar_reminder: true,
+    calendar_source_task: task,
+  };
+};
 
 const formatCalendarTime = (value) => {
   if (!value) return "All day";
@@ -820,6 +840,7 @@ function CalendarTimedView({ days, tasksByDay, onTaskClick }) {
           />
           {days.map((day) => {
             const dayTasks = getDateTasks(tasksByDay, day);
+            const dayTaskCount = getCalendarTaskCount(dayTasks);
             const isToday = toDateKey(day) === todayKey;
             return (
               <div key={toDateKey(day)} className="overflow-hidden border-l border-black/8 px-3 py-3 text-center">
@@ -829,9 +850,9 @@ function CalendarTimedView({ days, tasksByDay, onTaskClick }) {
                 <div className={`mx-auto mt-1 grid h-11 w-11 place-items-center rounded-full text-2xl ${isToday ? "bg-[#0b57d0] text-white" : "text-black/80"}`}>
                   {day.getDate()}
                 </div>
-                {dayTasks.length ? (
+                {dayTaskCount ? (
                   <div className="mx-auto mt-2 max-w-[150px] truncate rounded-lg bg-[#dfe5ee] px-2 py-1 text-center text-xs font-semibold text-[#17324d]">
-                    {dayTasks.length} pending task{dayTasks.length > 1 ? "s" : ""}
+                    {dayTaskCount} pending task{dayTaskCount > 1 ? "s" : ""}
                   </div>
                 ) : null}
               </div>
@@ -1458,6 +1479,7 @@ export default function WorkDesk() {
   const [saving, setSaving] = useState(false);
   const [workMode, setWorkMode] = useState("calendar");
   const [calendarView, setCalendarView] = useState("four_days");
+  const [calendarNowMs, setCalendarNowMs] = useState(() => Date.now());
   const [taskView, setTaskView] = useState("list");
   const [activeFilter, setActiveFilter] = useState("inbox");
   const [selectedWorkloadUserKey, setSelectedWorkloadUserKey] = useState("");
@@ -1628,6 +1650,14 @@ export default function WorkDesk() {
     };
   }, [loadData]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCalendarNowMs(Date.now());
+    }, 60 * 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
   const visibleTasks = useMemo(() => {
     const actorEmployeeId = currentEmployeeId ? String(currentEmployeeId) : "";
     return tasks.filter((task) => {
@@ -1661,20 +1691,25 @@ export default function WorkDesk() {
     }
   };
 
-  const calendarVisibleTasks = useMemo(
-    () => visibleTasks.filter((task) => !isReminderOccurrenceTask(task)),
-    [visibleTasks],
-  );
-
   const tasksByDay = useMemo(() => {
     const grouped = {};
-    calendarVisibleTasks.forEach((task) => {
+    const calendarRows = [];
+
+    visibleTasks.forEach((task) => {
+      if (!isReminderOccurrenceTask(task)) {
+        calendarRows.push(task);
+        const reminderEvent = buildCalendarReminderEvent(task, calendarNowMs);
+        if (reminderEvent) calendarRows.push(reminderEvent);
+      }
+    });
+
+    calendarRows.forEach((task) => {
       const key = toDateKey(task.due_at);
       grouped[key] = grouped[key] || [];
       grouped[key].push(task);
     });
     return grouped;
-  }, [calendarVisibleTasks]);
+  }, [calendarNowMs, visibleTasks]);
 
   const monthDays = useMemo(() => buildMonthDays(calendarDate), [calendarDate]);
 
@@ -1967,17 +2002,19 @@ export default function WorkDesk() {
   };
 
   const openTaskFromCalendar = (task) => {
-    if (canEditTaskDetails(task, currentEmployeeId, canViewAllTasks)) {
-      openTaskEditor(task);
+    const sourceTask = task?.calendar_source_task || task;
+
+    if (canEditTaskDetails(sourceTask, currentEmployeeId, canViewAllTasks)) {
+      openTaskEditor(sourceTask);
       return;
     }
 
-    if (canEditTaskReminder(task, currentEmployeeId, canViewAllTasks)) {
-      openReminderEditor(task);
+    if (canEditTaskReminder(sourceTask, currentEmployeeId, canViewAllTasks)) {
+      openReminderEditor(sourceTask);
       return;
     }
 
-    setDetailTarget(task);
+    setDetailTarget(sourceTask);
   };
 
   const handleTaskEdit = async (event) => {
