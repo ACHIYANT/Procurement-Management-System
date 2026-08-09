@@ -287,6 +287,10 @@ const getCalendarTitle = (baseDate, view) => {
 
 const getDateTasks = (tasksByDay, date) => tasksByDay[toDateKey(date)] || [];
 
+const isReminderOccurrenceTask = (task) =>
+  task?.system_rule_code === "task_reminder_occurrence" ||
+  task?.entity_type === "work_task_reminder";
+
 const formatCalendarTime = (value) => {
   if (!value) return "All day";
   const date = new Date(value);
@@ -1657,15 +1661,20 @@ export default function WorkDesk() {
     }
   };
 
+  const calendarVisibleTasks = useMemo(
+    () => visibleTasks.filter((task) => !isReminderOccurrenceTask(task)),
+    [visibleTasks],
+  );
+
   const tasksByDay = useMemo(() => {
     const grouped = {};
-    visibleTasks.forEach((task) => {
+    calendarVisibleTasks.forEach((task) => {
       const key = toDateKey(task.due_at);
       grouped[key] = grouped[key] || [];
       grouped[key].push(task);
     });
     return grouped;
-  }, [visibleTasks]);
+  }, [calendarVisibleTasks]);
 
   const monthDays = useMemo(() => buildMonthDays(calendarDate), [calendarDate]);
 
