@@ -1,6 +1,9 @@
 import { procurementRequest, postProcurement } from "@/lib/procurement-api";
 
 const REMINDER_ENABLED_KEY = "pms_work_reminders_enabled";
+const DELIVERED_REMINDER_CACHE = "pms-work-delivered-reminders-v1";
+const DELIVERED_REMINDER_CACHE_KEY = "/__pms-work-delivered-reminders";
+const PMS_NOTIFICATION_ICON = "/pms-logo.png";
 export const WORK_REMINDER_REFRESH_EVENT = "pms-work-reminders-refresh";
 export const WORK_REMINDER_DELIVERED_EVENT = "pms-work-reminder-delivered";
 
@@ -17,6 +20,13 @@ const formatReminderDateTime = (value) => {
     hour: "2-digit",
     minute: "2-digit",
   });
+};
+
+const formatReminderPriority = (task = {}) => {
+  if (task.severity === "critical" || task.priority === "critical") return "Critical";
+  if (task.priority === "high") return "High";
+  if (task.priority === "low") return "Low";
+  return "Medium";
 };
 
 export const areWorkRemindersEnabled = () => {
@@ -165,17 +175,19 @@ export const getReminderFrequencyMs = (frequency) => {
 
 export const getReminderNotificationKey = (task, nowMs) => {
   if (!task?.reminder_at) return null;
-  const reminderAt = new Date(task.reminder_at).getTime();
+  const reminderDate = new Date(task.reminder_at);
+  const reminderAt = reminderDate.getTime();
   if (Number.isNaN(reminderAt) || reminderAt > nowMs) return null;
+  const reminderKeyAt = reminderDate.toISOString();
 
   const frequency = task.reminder_frequency || "once";
   const intervalMs = getReminderFrequencyMs(frequency);
   if (!intervalMs) {
-    return `pms_work_reminder_${task.id}_${task.reminder_at}_once`;
+    return `pms_work_reminder_${task.id}_${reminderKeyAt}_once`;
   }
 
   const slot = Math.floor((nowMs - reminderAt) / intervalMs);
-  return `pms_work_reminder_${task.id}_${task.reminder_at}_${frequency}_${slot}`;
+  return `pms_work_reminder_${task.id}_${reminderKeyAt}_${frequency}_${slot}`;
 };
 
 export const wasReminderAlreadyShown = (storageKey) => {
@@ -194,16 +206,36 @@ export const markReminderShown = (storageKey) => {
   }
 };
 
+export const syncDeliveredPushReminderKeys = async () => {
+  if (typeof window === "undefined" || !("caches" in window)) return [];
+
+  try {
+    const cache = await caches.open(DELIVERED_REMINDER_CACHE);
+    const response = await cache.match(DELIVERED_REMINDER_CACHE_KEY);
+    if (!response) return [];
+    const payload = await response.json();
+    const keys = Array.isArray(payload?.keys) ? payload.keys.filter(Boolean) : [];
+    keys.forEach(markReminderShown);
+    return keys;
+  } catch {
+    return [];
+  }
+};
+
 const acknowledgeWorkPushDelivery = async ({ employeeId, notificationKey, taskId }) => {
-  if (!employeeId || !notificationKey || !taskId || String(taskId) === "permission-test") return;
+  if (!employeeId || !notificationKey || !taskId || String(taskId) === "permission-test") {
+    return false;
+  }
   try {
     await postProcurement("/work-push/acknowledge", {
       employee_id: employeeId,
       task_id: taskId,
       notification_key: notificationKey,
     });
+    return true;
   } catch {
     // Best-effort duplicate suppression; local duplicate protection still applies.
+    return false;
   }
 };
 
@@ -211,9 +243,60 @@ const waitForServiceWorkerReady = () =>
   Promise.race([
     navigator.serviceWorker.ready,
     new Promise((resolve) => {
-      window.setTimeout(() => resolve(null), 1200);
+      window.setTimeout(() => resolve(null), 2500);
     }),
   ]);
+
+const getReminderServiceWorkerRegistration = async () => {
+  if (!("serviceWorker" in navigator)) return null;
+
+  const existingRegistration = await navigator.serviceWorker.getRegistration("/");
+  if (existingRegistration) return existingRegistration;
+
+  try {
+    return await navigator.serviceWorker.register("/pms-reminder-sw.js");
+  } catch {
+    return waitForServiceWorkerReady();
+  }
+};
+
+const getBrowserFamily = () => {
+  const userAgent = window.navigator.userAgent || "";
+  if (/Edg\//.test(userAgent)) return "edge";
+  if (/Firefox\//.test(userAgent)) return "firefox";
+  if (/Safari\//.test(userAgent) && !/Chrome|Chromium|CriOS|Edg\//.test(userAgent)) {
+    return "safari";
+  }
+  if (/Chrome|Chromium|CriOS/.test(userAgent)) return "chromium";
+  return "browser";
+};
+
+const getPushUnavailableReason = () => {
+  if (!window.isSecureContext) return "insecure_context";
+  if (!("serviceWorker" in navigator)) return "service_worker_unsupported";
+  if (!("PushManager" in window)) {
+    return getBrowserFamily() === "safari"
+      ? "safari_push_requires_supported_version_or_installed_app"
+      : "push_manager_unsupported";
+  }
+  return null;
+};
+
+export const getWorkPushStatusMessage = (reason) => {
+  const messages = {
+    insecure_context: "open PMS on HTTPS or localhost",
+    server_not_configured: "server VAPID keys are not configured",
+    service_worker_not_ready: "service worker is not ready yet; reload once and try again",
+    service_worker_unsupported: "this browser does not support service workers here",
+    push_manager_unsupported: "this browser does not support background push here",
+    safari_push_requires_supported_version_or_installed_app:
+      "Safari background push needs a supported Safari/macOS version; on iPhone/iPad it usually works only after adding PMS to Home Screen",
+    missing_employee: "current login profile does not include an employee id",
+    subscription_failed: "push subscription failed",
+    unsupported: "background push is not supported in this browser/session",
+  };
+  return messages[reason] || reason || "browser/server support unavailable";
+};
 
 const urlBase64ToUint8Array = (base64String) => {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -223,8 +306,9 @@ const urlBase64ToUint8Array = (base64String) => {
 };
 
 export const ensureWorkPushSubscription = async ({ employeeId }) => {
-  if (!employeeId || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-    return { enabled: false, reason: "unsupported" };
+  const unavailableReason = getPushUnavailableReason();
+  if (!employeeId || unavailableReason) {
+    return { enabled: false, reason: unavailableReason || "missing_employee" };
   }
 
   const keyConfig = await procurementRequest("/work-push/public-key");
@@ -232,18 +316,35 @@ export const ensureWorkPushSubscription = async ({ employeeId }) => {
     return { enabled: false, reason: "server_not_configured" };
   }
 
-  const registration = await waitForServiceWorkerReady();
+  const registration =
+    (await getReminderServiceWorkerRegistration()) ||
+    (await waitForServiceWorkerReady());
   if (!registration?.pushManager) {
     return { enabled: false, reason: "service_worker_not_ready" };
   }
 
+  const applicationServerKey = urlBase64ToUint8Array(keyConfig.publicKey);
   const existingSubscription = await registration.pushManager.getSubscription();
-  const subscription =
-    existingSubscription ||
-    (await registration.pushManager.subscribe({
+  let subscription = existingSubscription;
+
+  if (existingSubscription) {
+    const options = existingSubscription.options || {};
+    const existingKey = options.applicationServerKey
+      ? Array.from(new Uint8Array(options.applicationServerKey)).join(",")
+      : "";
+    const nextKey = Array.from(applicationServerKey).join(",");
+    if (existingKey && existingKey !== nextKey) {
+      await existingSubscription.unsubscribe().catch(() => {});
+      subscription = null;
+    }
+  }
+
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(keyConfig.publicKey),
-    }));
+      applicationServerKey,
+    });
+  }
 
   await postProcurement("/work-push/subscribe", {
     employee_id: employeeId,
@@ -256,7 +357,7 @@ export const ensureWorkPushSubscription = async ({ employeeId }) => {
 
 export const showWorkReminderNotification = async (task) => {
   const title = task.title || "Work reminder";
-  const body = `Due ${formatReminderDateTime(task.due_at)}. ${
+  const body = `Priority: ${formatReminderPriority(task)}. Due ${formatReminderDateTime(task.due_at)}. ${
     task.linked_reference || "Open My Work for details."
   }`;
   const data = {
@@ -271,8 +372,8 @@ export const showWorkReminderNotification = async (task) => {
     silent: task.reminder_sound === "silent",
     timestamp: Date.now(),
     data,
-    icon: "/favicon.svg",
-    badge: "/favicon.svg",
+    icon: PMS_NOTIFICATION_ICON,
+    badge: PMS_NOTIFICATION_ICON,
   };
 
   if (!options.silent) {
@@ -282,7 +383,9 @@ export const showWorkReminderNotification = async (task) => {
   let serviceWorkerError = null;
   if ("serviceWorker" in navigator) {
     try {
-      const registration = await waitForServiceWorkerReady();
+      const registration =
+        (await getReminderServiceWorkerRegistration()) ||
+        (await waitForServiceWorkerReady());
       if (registration?.showNotification) {
         await registration.showNotification(title, options);
         return;
@@ -307,22 +410,24 @@ export const runDueWorkReminderNotifications = async (tasks = [], options = {}) 
 
   const now = Date.now();
   const employeeId = options.employeeId || null;
+  await syncDeliveredPushReminderKeys();
   for (const task of tasks) {
     if (!task?.reminder_at || ["completed", "cancelled"].includes(task.status)) continue;
     const storageKey = getReminderNotificationKey(task, now);
     if (!storageKey || wasReminderAlreadyShown(storageKey)) continue;
+    markReminderShown(storageKey);
+    await acknowledgeWorkPushDelivery({
+      employeeId,
+      notificationKey: storageKey,
+      taskId: task.id,
+    });
+
     try {
       await showWorkReminderNotification(task);
     } catch {
       // Native notification cards can be blocked by OS/browser settings. Keep PMS reminders alive.
     }
 
-    markReminderShown(storageKey);
-    acknowledgeWorkPushDelivery({
-      employeeId,
-      notificationKey: storageKey,
-      taskId: task.id,
-    });
     emitWorkReminderDelivered(task);
     if (task.reminder_sound !== "silent") {
       try {

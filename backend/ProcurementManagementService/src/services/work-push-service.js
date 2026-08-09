@@ -47,6 +47,16 @@ const configureWebPush = () => {
 const hashEndpoint = (endpoint) =>
   crypto.createHash("sha256").update(String(endpoint || "")).digest("hex");
 
+const getEndpointFingerprint = (endpoint) => hashEndpoint(endpoint).slice(0, 12);
+
+const isPushTraceEnabled = () =>
+  String(process.env.WORK_PUSH_TRACE || "").toLowerCase() === "true";
+
+const tracePush = (message, details = {}) => {
+  if (!isPushTraceEnabled()) return;
+  console.log("[WorkPush]", message, details);
+};
+
 const parseSubscription = (value) => {
   if (!value || typeof value !== "object") {
     const error = new Error("Push subscription is required.");
@@ -68,15 +78,17 @@ const parseSubscription = (value) => {
 
 const getReminderNotificationKey = (task, nowMs = Date.now()) => {
   if (!task?.reminder_at) return null;
-  const reminderAt = new Date(task.reminder_at).getTime();
+  const reminderDate = new Date(task.reminder_at);
+  const reminderAt = reminderDate.getTime();
   if (Number.isNaN(reminderAt) || reminderAt > nowMs) return null;
+  const reminderKeyAt = reminderDate.toISOString();
 
   const frequency = task.reminder_frequency || "once";
   const intervalMs = REMINDER_FREQUENCY_INTERVAL_MS[frequency];
-  if (!intervalMs) return `pms_work_reminder_${task.id}_${task.reminder_at}_once`;
+  if (!intervalMs) return `pms_work_reminder_${task.id}_${reminderKeyAt}_once`;
 
   const slot = Math.floor((nowMs - reminderAt) / intervalMs);
-  return `pms_work_reminder_${task.id}_${task.reminder_at}_${frequency}_${slot}`;
+  return `pms_work_reminder_${task.id}_${reminderKeyAt}_${frequency}_${slot}`;
 };
 
 const getReminderAssigneeIds = (task = {}) => {
@@ -89,11 +101,18 @@ const getReminderAssigneeIds = (task = {}) => {
   return Array.from(ids).filter(Boolean);
 };
 
+const getReminderPriorityLabel = (task = {}) => {
+  if (task.severity === "critical" || task.priority === "critical") return "Critical";
+  if (task.priority === "high") return "High";
+  if (task.priority === "low") return "Low";
+  return "Medium";
+};
+
 const buildPushPayload = (task, notificationKey) =>
   JSON.stringify({
     title: task.title || "Work reminder",
     description: task.description || "",
-    body: `Due reminder${task.due_at ? ` for ${new Date(task.due_at).toLocaleString("en-IN")}` : ""}.`,
+    body: `Priority: ${getReminderPriorityLabel(task)}. Due reminder${task.due_at ? ` for ${new Date(task.due_at).toLocaleString("en-IN")}` : ""}.`,
     url: task.linked_url || "/my-work",
     taskId: task.id,
     notificationKey,
@@ -200,7 +219,16 @@ class WorkPushService {
   }
 
   async sendDueReminderPushes() {
-    const result = { configured: isPushConfigured(), scanned: 0, sent: 0, skipped: 0, failed: 0 };
+    const result = {
+      configured: isPushConfigured(),
+      scanned: 0,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+      noAssignee: 0,
+      noSubscription: 0,
+      alreadyLogged: 0,
+    };
     if (!configureWebPush()) return result;
 
     const tasks = await this.taskRepository.findActiveReminderSourceTasks();
@@ -215,6 +243,11 @@ class WorkPushService {
       const assigneeIds = getReminderAssigneeIds(task);
       if (!assigneeIds.length) {
         result.skipped += 1;
+        result.noAssignee += 1;
+        tracePush("skipped reminder without assignee", {
+          taskId: task.id,
+          notificationKey,
+        });
         continue;
       }
 
@@ -225,6 +258,17 @@ class WorkPushService {
         },
       });
 
+      if (!subscriptions.length) {
+        result.skipped += 1;
+        result.noSubscription += 1;
+        tracePush("skipped reminder without active subscription", {
+          taskId: task.id,
+          notificationKey,
+          assigneeIds,
+        });
+        continue;
+      }
+
       for (const subscription of subscriptions) {
         const alreadySent = await WorkPushNotificationLog.findOne({
           where: {
@@ -234,13 +278,26 @@ class WorkPushService {
         });
         if (alreadySent) {
           result.skipped += 1;
+          result.alreadyLogged += 1;
+          tracePush("skipped already logged reminder", {
+            taskId: task.id,
+            subscriptionId: subscription.id,
+            endpoint: getEndpointFingerprint(subscription.endpoint),
+            notificationKey,
+          });
           continue;
         }
 
         try {
-          await webPush.sendNotification(
+          const pushResponse = await webPush.sendNotification(
             JSON.parse(subscription.subscription_json),
             buildPushPayload(task, notificationKey),
+            {
+              TTL: 60 * 60,
+              urgency: task.priority === "critical" || task.severity === "critical"
+                ? "high"
+                : "normal",
+            },
           );
           await WorkPushNotificationLog.create({
             work_push_subscription_id: subscription.id,
@@ -249,12 +306,27 @@ class WorkPushService {
             sent_at: new Date(),
           });
           result.sent += 1;
+          tracePush("accepted by push service", {
+            taskId: task.id,
+            subscriptionId: subscription.id,
+            endpoint: getEndpointFingerprint(subscription.endpoint),
+            notificationKey,
+            statusCode: pushResponse?.statusCode || null,
+          });
         } catch (error) {
           result.failed += 1;
           const statusCode = Number(error?.statusCode || error?.status || 0);
           await subscription.update({
             is_active: statusCode === 404 || statusCode === 410 ? false : subscription.is_active,
             last_error: error?.message || "Unable to send push notification.",
+          });
+          tracePush("push delivery failed", {
+            taskId: task.id,
+            subscriptionId: subscription.id,
+            endpoint: getEndpointFingerprint(subscription.endpoint),
+            notificationKey,
+            statusCode,
+            message: error?.message || "Unable to send push notification.",
           });
         }
       }

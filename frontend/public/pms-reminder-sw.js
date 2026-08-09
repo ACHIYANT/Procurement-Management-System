@@ -2,6 +2,44 @@ self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
 });
 
+const DELIVERED_REMINDER_CACHE = "pms-work-delivered-reminders-v1";
+const DELIVERED_REMINDER_CACHE_KEY = "/__pms-work-delivered-reminders";
+const PMS_NOTIFICATION_ICON = "/pms-logo.png";
+const MAX_DELIVERED_REMINDER_KEYS = 500;
+
+const readDeliveredReminderKeys = async () => {
+  if (!self.caches) return [];
+  try {
+    const cache = await self.caches.open(DELIVERED_REMINDER_CACHE);
+    const response = await cache.match(DELIVERED_REMINDER_CACHE_KEY);
+    if (!response) return [];
+    const payload = await response.json();
+    return Array.isArray(payload?.keys) ? payload.keys.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+};
+
+const rememberDeliveredReminderKey = async (notificationKey) => {
+  if (!notificationKey || !self.caches) return;
+  try {
+    const existingKeys = await readDeliveredReminderKeys();
+    const keys = [
+      notificationKey,
+      ...existingKeys.filter((key) => key !== notificationKey),
+    ].slice(0, MAX_DELIVERED_REMINDER_KEYS);
+    const cache = await self.caches.open(DELIVERED_REMINDER_CACHE);
+    await cache.put(
+      DELIVERED_REMINDER_CACHE_KEY,
+      new Response(JSON.stringify({ keys, updatedAt: Date.now() }), {
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  } catch {
+    // Duplicate suppression is best-effort; notification delivery should continue.
+  }
+};
+
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
@@ -40,15 +78,16 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Work reminder";
   const isCritical = payload.priority === "critical" || payload.severity === "critical";
   const notificationKey = payload.notificationKey || null;
+  const notificationTag = notificationKey || payload.taskId || Date.now();
   const options = {
     body: payload.body || "Open My Work for details.",
-    tag: `pms-work-push-${payload.taskId || Date.now()}`,
+    tag: `pms-work-push-${notificationTag}`,
     renotify: true,
     requireInteraction: isCritical,
     silent: payload.reminderSound === "silent",
     timestamp: Date.now(),
-    icon: "/favicon.svg",
-    badge: "/favicon.svg",
+    icon: PMS_NOTIFICATION_ICON,
+    badge: PMS_NOTIFICATION_ICON,
     data: {
       taskId: payload.taskId || null,
       url: payload.url || "/my-work",
@@ -68,7 +107,7 @@ self.addEventListener("push", (event) => {
       (client) =>
         new Promise((resolve) => {
           const channel = new MessageChannel();
-          const timeoutId = setTimeout(() => resolve(false), 700);
+          const timeoutId = setTimeout(() => resolve(false), 1500);
 
           channel.port1.onmessage = (messageEvent) => {
             clearTimeout(timeoutId);
@@ -99,10 +138,24 @@ self.addEventListener("push", (event) => {
     return Promise.all(clientClaims).then((claims) => claims.some(Boolean));
   });
 
-  const deliverPush = notifyOpenClients.then((alreadyDeliveredInClient) => {
+  const deliverPush = notifyOpenClients.then(async (alreadyDeliveredInClient) => {
     if (alreadyDeliveredInClient) return undefined;
+    await rememberDeliveredReminderKey(notificationKey);
     return self.registration.showNotification(title, options);
   });
 
   event.waitUntil(deliverPush);
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "get-delivered-work-reminder-keys") return;
+
+  const replyPort = event.ports?.[0];
+  if (!replyPort) return;
+
+  event.waitUntil(
+    readDeliveredReminderKeys().then((keys) => {
+      replyPort.postMessage({ keys });
+    }),
+  );
 });

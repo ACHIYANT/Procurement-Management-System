@@ -81,8 +81,14 @@ const startWorkTaskScheduler = () => {
         ),
       ]);
 
+    const pushSkipDetails = [
+      `no assignee ${pushResult.noAssignee || 0}`,
+      `no subscription ${pushResult.noSubscription || 0}`,
+      `already logged ${pushResult.alreadyLogged || 0}`,
+    ].join(", ");
+
     console.log(
-      `[WorkTaskScheduler] synced ${syncResult.created} created/${syncResult.updated} updated; refreshed ${reminderResult.scanned} reminder sources; escalated ${escalationResult.escalated}; push sent ${pushResult.sent}/${pushResult.scanned} due reminders; skipped ${pushResult.skipped || 0}; failed ${pushResult.failed || 0}.`,
+      `[WorkTaskScheduler] synced ${syncResult.created} created/${syncResult.updated} updated; refreshed ${reminderResult.scanned} reminder sources; escalated ${escalationResult.escalated}; push sent ${pushResult.sent}/${pushResult.scanned} due reminders; skipped ${pushResult.skipped || 0} (${pushSkipDetails}); failed ${pushResult.failed || 0}.`,
     );
   };
 
