@@ -22,6 +22,13 @@ const formatReminderDateTime = (value) => {
   });
 };
 
+const formatReminderPriority = (task = {}) => {
+  if (task.severity === "critical" || task.priority === "critical") return "Critical";
+  if (task.priority === "high") return "High";
+  if (task.priority === "low") return "Low";
+  return "Medium";
+};
+
 export const areWorkRemindersEnabled = () => {
   if (typeof window === "undefined" || !("Notification" in window)) return false;
   try {
@@ -350,7 +357,7 @@ export const ensureWorkPushSubscription = async ({ employeeId }) => {
 
 export const showWorkReminderNotification = async (task) => {
   const title = task.title || "Work reminder";
-  const body = `Due ${formatReminderDateTime(task.due_at)}. ${
+  const body = `Priority: ${formatReminderPriority(task)}. Due ${formatReminderDateTime(task.due_at)}. ${
     task.linked_reference || "Open My Work for details."
   }`;
   const data = {
