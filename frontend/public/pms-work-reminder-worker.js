@@ -17,16 +17,18 @@ const getReminderFrequencyMs = (frequency) => {
 
 const getReminderNotificationKey = (task, nowMs) => {
   if (!task?.reminder_at) return null;
-  const reminderAt = new Date(task.reminder_at).getTime();
+  const reminderDate = new Date(task.reminder_at);
+  const reminderAt = reminderDate.getTime();
   if (Number.isNaN(reminderAt) || reminderAt > nowMs) return null;
+  const reminderKeyAt = reminderDate.toISOString();
 
   const frequency = task.reminder_frequency || "once";
   const intervalMs = getReminderFrequencyMs(frequency);
   if (!intervalMs)
-    return `pms_work_reminder_${task.id}_${task.reminder_at}_once`;
+    return `pms_work_reminder_${task.id}_${reminderKeyAt}_once`;
 
   const slot = Math.floor((nowMs - reminderAt) / intervalMs);
-  return `pms_work_reminder_${task.id}_${task.reminder_at}_${frequency}_${slot}`;
+  return `pms_work_reminder_${task.id}_${reminderKeyAt}_${frequency}_${slot}`;
 };
 
 const findDueTasks = () => {
