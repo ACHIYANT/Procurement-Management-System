@@ -39,6 +39,7 @@ self.addEventListener("push", (event) => {
   const payload = event.data?.json() || {};
   const title = payload.title || "Work reminder";
   const isCritical = payload.priority === "critical" || payload.severity === "critical";
+  const notificationKey = payload.notificationKey || null;
   const options = {
     body: payload.body || "Open My Work for details.",
     tag: `pms-work-push-${payload.taskId || Date.now()}`,
@@ -51,7 +52,7 @@ self.addEventListener("push", (event) => {
     data: {
       taskId: payload.taskId || null,
       url: payload.url || "/my-work",
-      notificationKey: payload.notificationKey || null,
+      notificationKey,
       reminderSound: payload.reminderSound || "soft_bell",
     },
   };
@@ -60,27 +61,48 @@ self.addEventListener("push", (event) => {
     options.vibrate = [180, 90, 180];
   }
 
-  const notifyOpenClients = self.clients
-    .matchAll({ type: "window", includeUncontrolled: true })
-    .then((clients) => {
-      clients.forEach((client) => {
-        client.postMessage({
-          type: "work-reminder-push",
-          task: {
-            id: payload.taskId || null,
-            notification_key: payload.notificationKey || "",
-            title,
-            description: payload.description || "",
-            due_at: payload.dueAt || null,
-            reminder_at: payload.reminderAt || null,
-            priority: payload.priority || "medium",
-            severity: payload.severity || "normal",
-            linked_reference: payload.linkedReference || "",
-            linked_url: payload.url || "/my-work",
-          },
-        });
-      });
-    });
+  const notifyOpenClients = self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    if (!clients.length) return false;
 
-  event.waitUntil(Promise.all([self.registration.showNotification(title, options), notifyOpenClients]));
+    const clientClaims = clients.map(
+      (client) =>
+        new Promise((resolve) => {
+          const channel = new MessageChannel();
+          const timeoutId = setTimeout(() => resolve(false), 700);
+
+          channel.port1.onmessage = (messageEvent) => {
+            clearTimeout(timeoutId);
+            resolve(Boolean(messageEvent.data?.alreadyDelivered));
+          };
+
+          client.postMessage(
+            {
+              type: "work-reminder-push",
+              task: {
+                id: payload.taskId || null,
+                notification_key: notificationKey || "",
+                title,
+                description: payload.description || "",
+                due_at: payload.dueAt || null,
+                reminder_at: payload.reminderAt || null,
+                priority: payload.priority || "medium",
+                severity: payload.severity || "normal",
+                linked_reference: payload.linkedReference || "",
+                linked_url: payload.url || "/my-work",
+              },
+            },
+            [channel.port2],
+          );
+        }),
+    );
+
+    return Promise.all(clientClaims).then((claims) => claims.some(Boolean));
+  });
+
+  const deliverPush = notifyOpenClients.then((alreadyDeliveredInClient) => {
+    if (alreadyDeliveredInClient) return undefined;
+    return self.registration.showNotification(title, options);
+  });
+
+  event.waitUntil(deliverPush);
 });
