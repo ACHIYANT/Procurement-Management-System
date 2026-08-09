@@ -68,7 +68,7 @@ self.addEventListener("push", (event) => {
       (client) =>
         new Promise((resolve) => {
           const channel = new MessageChannel();
-          const timeoutId = setTimeout(() => resolve(false), 700);
+          const timeoutId = setTimeout(() => resolve(false), 1500);
 
           channel.port1.onmessage = (messageEvent) => {
             clearTimeout(timeoutId);
