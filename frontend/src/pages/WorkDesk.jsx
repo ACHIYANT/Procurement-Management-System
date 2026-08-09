@@ -291,6 +291,9 @@ const isReminderOccurrenceTask = (task) =>
   task?.system_rule_code === "task_reminder_occurrence" ||
   task?.entity_type === "work_task_reminder";
 
+const getCalendarTaskCount = (tasks) =>
+  tasks.filter((task) => !isReminderOccurrenceTask(task)).length;
+
 const formatCalendarTime = (value) => {
   if (!value) return "All day";
   const date = new Date(value);
@@ -820,6 +823,7 @@ function CalendarTimedView({ days, tasksByDay, onTaskClick }) {
           />
           {days.map((day) => {
             const dayTasks = getDateTasks(tasksByDay, day);
+            const dayTaskCount = getCalendarTaskCount(dayTasks);
             const isToday = toDateKey(day) === todayKey;
             return (
               <div key={toDateKey(day)} className="overflow-hidden border-l border-black/8 px-3 py-3 text-center">
@@ -829,9 +833,9 @@ function CalendarTimedView({ days, tasksByDay, onTaskClick }) {
                 <div className={`mx-auto mt-1 grid h-11 w-11 place-items-center rounded-full text-2xl ${isToday ? "bg-[#0b57d0] text-white" : "text-black/80"}`}>
                   {day.getDate()}
                 </div>
-                {dayTasks.length ? (
+                {dayTaskCount ? (
                   <div className="mx-auto mt-2 max-w-[150px] truncate rounded-lg bg-[#dfe5ee] px-2 py-1 text-center text-xs font-semibold text-[#17324d]">
-                    {dayTasks.length} pending task{dayTasks.length > 1 ? "s" : ""}
+                    {dayTaskCount} pending task{dayTaskCount > 1 ? "s" : ""}
                   </div>
                 ) : null}
               </div>
@@ -1661,20 +1665,15 @@ export default function WorkDesk() {
     }
   };
 
-  const calendarVisibleTasks = useMemo(
-    () => visibleTasks.filter((task) => !isReminderOccurrenceTask(task)),
-    [visibleTasks],
-  );
-
   const tasksByDay = useMemo(() => {
     const grouped = {};
-    calendarVisibleTasks.forEach((task) => {
+    visibleTasks.forEach((task) => {
       const key = toDateKey(task.due_at);
       grouped[key] = grouped[key] || [];
       grouped[key].push(task);
     });
     return grouped;
-  }, [calendarVisibleTasks]);
+  }, [visibleTasks]);
 
   const monthDays = useMemo(() => buildMonthDays(calendarDate), [calendarDate]);
 
