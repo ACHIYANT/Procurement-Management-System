@@ -46,7 +46,6 @@ self.addEventListener("push", (event) => {
     requireInteraction: isCritical,
     silent: payload.reminderSound === "silent",
     timestamp: Date.now(),
-    vibrate: [180, 90, 180],
     icon: "/favicon.svg",
     badge: "/favicon.svg",
     data: {
@@ -55,6 +54,10 @@ self.addEventListener("push", (event) => {
       reminderSound: payload.reminderSound || "soft_bell",
     },
   };
+
+  if (!options.silent) {
+    options.vibrate = [180, 90, 180];
+  }
 
   const notifyOpenClients = self.clients
     .matchAll({ type: "window", includeUncontrolled: true })
