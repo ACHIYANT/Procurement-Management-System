@@ -4,7 +4,7 @@ const WorkTaskService = require("./work-task-service");
 const WorkPushService = require("./work-push-service");
 
 const DEFAULT_INTERVAL_MINUTES = 1;
-const DEFAULT_RUN_SECOND_OFFSET = 5;
+const DEFAULT_RUN_SECOND_OFFSET = 10;
 
 const emptySyncResult = { created: 0, updated: 0 };
 const emptyReminderResult = { scanned: 0 };
