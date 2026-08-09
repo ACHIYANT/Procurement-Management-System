@@ -1415,7 +1415,7 @@ function WorkloadTaskBucket({ title, rows, tone = "slate", emptyText }) {
 }
 
 const getProfileProcurementEmployeeId = (profile = {}) =>
-  profile?.employee_id || profile?.procurement_employee_id || null;
+  profile?.employee_id || profile?.procurement_employee_id || profile?.id || null;
 
 export default function WorkDesk() {
   const [roles] = useState(() => getCurrentUserRoles());

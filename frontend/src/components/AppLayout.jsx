@@ -139,7 +139,7 @@ function PmsBrandHeader() {
 
 const getCurrentProcurementEmployeeId = () => {
   const profile = getCurrentUserProfile();
-  return profile?.employee_id || profile?.procurement_employee_id || null;
+  return profile?.employee_id || profile?.procurement_employee_id || profile?.id || null;
 };
 
 const formatFlashDateTime = (value) => {
