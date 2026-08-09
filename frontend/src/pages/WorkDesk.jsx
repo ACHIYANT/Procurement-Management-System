@@ -1772,8 +1772,8 @@ export default function WorkDesk() {
 
   useEffect(() => {
     if (!notificationsEnabled) return;
-    runDueWorkReminderNotifications(tasks);
-  }, [notificationsEnabled, tasks]);
+    runDueWorkReminderNotifications(tasks, { employeeId: currentEmployeeId });
+  }, [currentEmployeeId, notificationsEnabled, tasks]);
 
   const currentLinkOptions = useMemo(() => {
     const sourceRows = {
